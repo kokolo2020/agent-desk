@@ -2,6 +2,12 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v0.7
+- BTC and NEAR now run side by side. Each coin has its own desk: six agents, live chart, $150 paper balance, activity tape and verdict. The header shows the total of both balances.
+- NEAR thresholds are first guesses: momentum gate 0.06%, depth minimum $0.5M, max spread 8 bps.
+- KuCoin futures added as the last backup price source, untested.
+- Backup sources are keyed per coin (Bybit, Binance, OKX, KuCoin).
+
 ## v0.6
 - Paper bank is now $150.
 
