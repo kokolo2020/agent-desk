@@ -2,6 +2,12 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.10
+- New "Spread quoter" panel on each desk (paper only). It rests a bid at the best bid and an ask at the best ask, never crosses the spread, and shows spread capture before fees plus the net result at three fee levels: standard maker 0.02%, 0%, and a 0.005% rebate. This tests whether market-making (the Jev idea) beats fees.
+- Fill rule is strict: a bid fills only when a trade prints below it (an ask: above it), with no credit for queue position. Quotes refresh from each book snapshot (now every 3 seconds, was every 9), and a filled side stays empty until the next snapshot.
+- Risk: inventory capped at $225 per side; a 0.4% adverse move flattens at the touch as taker. Fills are logged as `mm_fill` and `mm_flatten`, plus a once-a-minute `mm_snap`, in `desk_events`. Nothing goes to `paper_trades`.
+- Open the page with `?mm=only` to run only the quoter (the formula desks, twin and fade bot stay off), so it can run beside a fade-bot tab without doubling trades.
+
 ## v1.9
 - Tuned from the overnight run (42 trades, -$26.65; the judge's 30 early exits lost $31.10, the plain rules made +$4.47).
 - The judge can now only cut a LOSING trade: it is asked only once the trade is down 0.3% and held 30s+, and a CLOSE acts only at down 0.4% or worse. Winners are left to the take profit.
