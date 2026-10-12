@@ -2,6 +2,10 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.3
+- Manual order: TP and SL are now entered as prices (for example TP 5.20, SL 5.75), not percentages. Leave a box blank to use the default +0.40% / −0.20% from the entry price.
+- The panel checks the direction: a SHORT needs TP below and SL above the entry; a LONG needs TP above and SL below. Otherwise it shows a message and does not open the order.
+
 ## v1.2
 - Manual order panel on each coin: place paper LONG or SHORT yourself, market or limit, with your own TP % and SL %, and size of 100%, 50% or 25% of the bank at 5x.
 - Own $150 bank per coin, separate from the agent desk and the limit twin, so the comparison stays clean. Saved to Supabase with run `v1.2-manual`.
