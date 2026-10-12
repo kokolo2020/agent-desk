@@ -2,6 +2,10 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.6
+- Manual order: TP and SL boxes reset to blank after every close or cancel. A blank box now means the default: TP 3% in profit and SL 3% against, from the entry price (before: +0.4% / −0.2%).
+- You can still type your own prices, or change them later with UPDATE TP / SL.
+
 ## v1.5
 - Manual order: new UPDATE TP / SL button. Change the TP and SL boxes, then tap it to move them on a resting limit order or an open position. A blank box keeps the current value.
 - The TP and SL boxes now fill in with the position's levels when an order is placed or filled.

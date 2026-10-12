@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v1.5">
+<meta name="version" content="v1.6">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -127,7 +127,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.5</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.6</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
       <p>6 agents per coin · live prices · paper trades only</p>
     </div>
     <div class="pills">
@@ -138,7 +138,7 @@ td.r, th.r { text-align: right; }
 
   <div class="desks" id="desks"></div>
 
-  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. v1.5: TP and SL of a manual order or open position can be changed with UPDATE TP / SL. v1.4: signals, Claude's verdicts, orders, fills, misses and cancels are logged to Supabase (desk_events). v1.3: manual order TP and SL are now prices. v1.2: a Manual order panel on each coin lets you place paper market or limit orders yourself, with your own TP and SL (own $150 bank, not part of the agent comparison). The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
+  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. v1.6: manual TP and SL reset to blank after every close or cancel, and a blank box means 3% from entry. v1.5: TP and SL of a manual order or open position can be changed with UPDATE TP / SL. v1.4: signals, Claude's verdicts, orders, fills, misses and cancels are logged to Supabase (desk_events). v1.3: manual order TP and SL are now prices. v1.2: a Manual order panel on each coin lets you place paper market or limit orders yourself, with your own TP and SL (own $150 bank, not part of the agent comparison). The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
 </div>
 
 <script>
@@ -171,7 +171,7 @@ td.r, th.r { text-align: right; }
   ];
   var MET_KEYS = ['book_depth_usd', 'spread_bps', 'funding_rate', 'open_interest', 'turnover_24h', 'change_24h'];
   /* v0.9 ledger: every closed paper trade is saved to Supabase (anon key, insert-only by row rules). */
-  var RUN = 'v1.5', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
+  var RUN = 'v1.6', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
   var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXFxdnBsb3Nud3F1YWtzc2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTAzMTUsImV4cCI6MjA5ODYyNjMxNX0.FPcGOaZqdAXje_BI1a8BKYQrMi5uS2zm0Oy3hopZdho';
   var SESSION = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   var ledgerOk = 0, ledgerErr = 0, ledgerMsg = '';
@@ -230,7 +230,7 @@ td.r, th.r { text-align: right; }
       '<label>Type<select data-r="mType" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><option value="market">Market</option><option value="limit">Limit</option></select></label>' +
       '<label>Limit price<input data-r="mPx" type="number" step="any" inputmode="decimal" placeholder="price" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"></label>' +
       '<label>Size<select data-r="mSize" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><option value="1">100% (5x)</option><option value="0.5">50%</option><option value="0.25">25%</option></select></label>' +
-      '<label>TP price / SL price<span style="display:flex;gap:6px"><input data-r="mTp" type="number" step="any" inputmode="decimal" placeholder="TP (blank = +0.4%)" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><input data-r="mSl" type="number" step="any" inputmode="decimal" placeholder="SL (blank = 0.2%)" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"></span></label></div>' +
+      '<label>TP price / SL price<span style="display:flex;gap:6px"><input data-r="mTp" type="number" step="any" inputmode="decimal" placeholder="TP (blank = 3%)" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><input data-r="mSl" type="number" step="any" inputmode="decimal" placeholder="SL (blank = 3%)" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"></span></label></div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">' +
       '<button data-r="mLong" style="border:1px solid var(--line);border-radius:10px;padding:11px 6px;font:700 13px var(--mono);min-height:44px;cursor:pointer;color:#fff;background:var(--up)">LONG</button><button data-r="mShort" style="border:1px solid var(--line);border-radius:10px;padding:11px 6px;font:700 13px var(--mono);min-height:44px;cursor:pointer;color:#fff;background:var(--down)">SHORT</button><button data-r="mUpdate" style="border:1px solid var(--line);border-radius:10px;padding:11px 6px;font:700 13px var(--mono);min-height:44px;cursor:pointer;color:#fff;background:#3a6df0">UPDATE TP / SL</button><button data-r="mCancel" style="border:1px solid var(--line);border-radius:10px;padding:11px 6px;font:700 13px var(--mono);min-height:44px;cursor:pointer;color:#fff;background:#555">CANCEL / CLOSE</button></div>' +
       '<div class="num" data-r="mStat" style="font-size:12px;line-height:1.7;margin-top:10px">flat</div></div>' +
@@ -454,6 +454,7 @@ td.r, th.r { text-align: right; }
     /* v1.2 manual order: you place paper orders yourself. Own $150 bank, same fees as the twin.
        Market = fills at last price (taker). Limit = rests until price trades through it by 0.01% (maker); a limit
        already past the market fills at once as taker. TP exits as maker, SL and manual close as taker. No time limit. */
+    var MDEF = 0.03; /* manual default: TP and SL 3% from entry */
     var mn = { bank: START, pnl: 0, fees: 0, w: 0, l: 0, order: null, pos: null, msg: '' };
     function manualFill(side, entry, notional, tpPx, slPx, inFee) {
       mn.pos = { side: side, entry: entry, size: notional / entry, notional: notional, tpPx: tpPx, slPx: slPx, inFee: inFee, t0: Date.now() };
@@ -461,7 +462,7 @@ td.r, th.r { text-align: right; }
       q('mTp').value = +tpPx.toFixed(c.dec); q('mSl').value = +slPx.toFixed(c.dec);
       logEvent('manual_fill', c.key, side, price, { entry: entry, tp: tpPx, sl: slPx, notional: notional, fee_rate: inFee });
     }
-    /* tpPx and slPx are PRICES (blank or 0 = default +0.40% / -0.20% from the entry price) */
+    /* tpPx and slPx are PRICES (blank or 0 = default 3% from the entry price: TP 3% in profit, SL 3% against) */
     function manualOpen(side, type, lim, tpPx, slPx, frac) {
       if (mn.order || mn.pos) return 'already have an order or position';
       if (!price) return 'no price yet';
@@ -472,8 +473,8 @@ td.r, th.r { text-align: right; }
         if (rest) entry = lim;
       }
       var d = side === 'LONG' ? 1 : -1;
-      if (!(tpPx > 0)) tpPx = entry * (1 + d * TP);
-      if (!(slPx > 0)) slPx = entry * (1 - d * SL);
+      if (!(tpPx > 0)) tpPx = entry * (1 + d * MDEF);
+      if (!(slPx > 0)) slPx = entry * (1 - d * MDEF);
       if (d * (tpPx - entry) <= 0) return 'TP ' + P(tpPx) + ' must be ' + (d > 0 ? 'above' : 'below') + ' entry ' + P(entry) + ' for a ' + side;
       if (d * (entry - slPx) <= 0) return 'SL ' + P(slPx) + ' must be ' + (d > 0 ? 'below' : 'above') + ' entry ' + P(entry) + ' for a ' + side;
       var notional = mn.bank * LEV * frac;
@@ -487,6 +488,7 @@ td.r, th.r { text-align: right; }
       mn.fees += fee; mn.pnl += pnl; mn.bank += pnl; if (pnl >= 0) mn.w++; else mn.l++;
       saveTrade({ run: RUN + '-manual', session: SESSION, coin: c.key, side: p.side, entry_price: p.entry, exit_price: xp, size: p.size, notional: p.notional, fees: fee, pnl: pnl, reason: 'manual: ' + why, opened_at: new Date(p.t0).toISOString(), closed_at: new Date().toISOString() });
       mn.msg = 'closed ' + why + ' ' + (pnl >= 0 ? '+' : '-') + usd(Math.abs(pnl)); mn.pos = null;
+      q('mTp').value = ''; q('mSl').value = '';
     }
     /* change TP and SL on a resting order or an open position. Blank keeps the current value.
        TP must stay beyond the market and SL on the other side of it (so a stop can be moved up to lock profit). */
@@ -501,7 +503,7 @@ td.r, th.r { text-align: right; }
       return 'updated: TP ' + P(nt) + ' · SL ' + P(ns);
     }
     function manualCancel() {
-      if (mn.order) { logEvent('manual_cancel', c.key, mn.order.side, price, { limit: mn.order.lim }); mn.order = null; mn.msg = 'order cancelled'; }
+      if (mn.order) { logEvent('manual_cancel', c.key, mn.order.side, price, { limit: mn.order.lim }); mn.order = null; mn.msg = 'order cancelled'; q('mTp').value = ''; q('mSl').value = ''; }
       else if (mn.pos) manualExit(price, 'manual close', FEE);
     }
     function manualStep() {
