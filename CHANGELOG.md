@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v0.9
+- Every closed paper trade is now saved to a Supabase table (`paper_trades`) with run version, session, coin, side, entry/exit, size, fees, P&L and reason. Trades survive reloads, so versions can be compared fairly.
+- Header shows `ledger: N saved` (turns red with the error if a save fails).
+- Uses the public anon key only; the table's row rules allow adding and reading trades, nothing else. Trading logic unchanged from v0.8.
+
 ## v0.8
 - Result of v0.7 after 52 minutes: about 76 trades, gross P&L +$8, fees $57, net -$49 on $300. Fees dominated.
 - Far fewer trades: 10-minute cooldown after each trade, and entry only on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR).

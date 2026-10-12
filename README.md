@@ -8,3 +8,6 @@ Single-file dashboard for a multi-agent BTC paper-trading desk. Pure HTML, no bu
 - Scan and Vet scores come from real momentum and order-book data. Results reset on page reload.
 
 Deploy: connect this repo to Netlify, publish directory `/`. It must run on a normal site, not inside a sandboxed iframe, so the browser can reach the Bybit API.
+
+## Trade ledger (v0.9)
+Closed paper trades are saved to Supabase table `paper_trades` (anon key, insert and select only). Compare versions with `select run, count(*), sum(pnl) from paper_trades group by run;`
