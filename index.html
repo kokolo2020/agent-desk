@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v1.3">
+<meta name="version" content="v1.4">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -127,7 +127,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.3</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.4</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
       <p>6 agents per coin · live prices · paper trades only</p>
     </div>
     <div class="pills">
@@ -138,7 +138,7 @@ td.r, th.r { text-align: right; }
 
   <div class="desks" id="desks"></div>
 
-  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. v1.3: manual order TP and SL are now prices. v1.2: a Manual order panel on each coin lets you place paper market or limit orders yourself, with your own TP and SL (own $150 bank, not part of the agent comparison). The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
+  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. v1.4: signals, Claude's verdicts, orders, fills, misses and cancels are logged to Supabase (desk_events). v1.3: manual order TP and SL are now prices. v1.2: a Manual order panel on each coin lets you place paper market or limit orders yourself, with your own TP and SL (own $150 bank, not part of the agent comparison). The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
 </div>
 
 <script>
@@ -171,7 +171,7 @@ td.r, th.r { text-align: right; }
   ];
   var MET_KEYS = ['book_depth_usd', 'spread_bps', 'funding_rate', 'open_interest', 'turnover_24h', 'change_24h'];
   /* v0.9 ledger: every closed paper trade is saved to Supabase (anon key, insert-only by row rules). */
-  var RUN = 'v1.3', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
+  var RUN = 'v1.4', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
   var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXFxdnBsb3Nud3F1YWtzc2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTAzMTUsImV4cCI6MjA5ODYyNjMxNX0.FPcGOaZqdAXje_BI1a8BKYQrMi5uS2zm0Oy3hopZdho';
   var SESSION = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   var ledgerOk = 0, ledgerErr = 0, ledgerMsg = '';
@@ -191,6 +191,16 @@ td.r, th.r { text-align: right; }
         ledgerPaint();
       }).catch(function (e) { ledgerErr++; ledgerMsg = String(e.message || e).slice(0, 40); ledgerPaint(); });
     } catch (e) { ledgerErr++; ledgerMsg = 'error'; ledgerPaint(); }
+  }
+  /* v1.4 event log: signals, Claude's verdicts, orders, fills, misses and cancels go to desk_events. Silent if it fails. */
+  function logEvent(kind, coin, side, price, data) {
+    try {
+      fetch(SB_URL + '/rest/v1/desk_events', {
+        method: 'POST',
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ run: RUN, session: SESSION, coin: coin, kind: kind, side: side || null, price: price || null, data: data || null })
+      }).catch(function () {});
+    } catch (e) {}
   }
   setTimeout(ledgerPaint, 500);
   /* v1.0 LLM Chief: when the formula wants a trade, a Claude model must agree before the desk enters. */
@@ -413,13 +423,14 @@ td.r, th.r { text-align: right; }
       if (tw.order || tw.pos || !price) return;
       var sp = (live.ob ? live.ob.spread : 2) / 2 / 1e4;
       tw.order = { side: side, lim: side === 'LONG' ? price * (1 - sp) : price * (1 + sp), t0: Date.now(), notional: tw.bank * LEV, sig: price };
+      logEvent('twin_order', c.key, side, price, { limit: tw.order.lim, spread_bps: live.ob ? live.ob.spread : null });
     }
     function twinStep() {
       if (!price) return;
       if (tw.order) {
         var o = tw.order, hit = o.side === 'LONG' ? price <= o.lim * 0.9999 : price >= o.lim * 1.0001;
-        if (hit) { tw.pos = { side: o.side, entry: o.lim, size: o.notional / o.lim, notional: o.notional, t0: Date.now(), sig: o.sig }; tw.order = null; tw.filled++; }
-        else if (Date.now() - o.t0 >= TWAIT) { tw.order = null; tw.missed++; }
+        if (hit) { tw.pos = { side: o.side, entry: o.lim, size: o.notional / o.lim, notional: o.notional, t0: Date.now(), sig: o.sig }; tw.order = null; tw.filled++; logEvent('twin_fill', c.key, o.side, price, { limit: o.lim, signal_price: o.sig, waited_s: Math.round((Date.now() - o.t0) / 1000) }); }
+        else if (Date.now() - o.t0 >= TWAIT) { tw.order = null; tw.missed++; logEvent('twin_missed', c.key, o.side, price, { limit: o.lim, signal_price: o.sig }); }
       } else if (tw.pos) {
         var p = tw.pos, dir = p.side === 'LONG' ? 1 : -1, mv = dir * (price - p.entry) / p.entry;
         var why = mv >= TP ? 'take profit (maker)' : mv <= -SL ? 'stop (taker)' : (Date.now() - p.t0 >= MAXHOLD ? 'time exit (taker)' : null);
@@ -447,6 +458,7 @@ td.r, th.r { text-align: right; }
     function manualFill(side, entry, notional, tpPx, slPx, inFee) {
       mn.pos = { side: side, entry: entry, size: notional / entry, notional: notional, tpPx: tpPx, slPx: slPx, inFee: inFee, t0: Date.now() };
       mn.order = null;
+      logEvent('manual_fill', c.key, side, price, { entry: entry, tp: tpPx, sl: slPx, notional: notional, fee_rate: inFee });
     }
     /* tpPx and slPx are PRICES (blank or 0 = default +0.40% / -0.20% from the entry price) */
     function manualOpen(side, type, lim, tpPx, slPx, frac) {
@@ -464,7 +476,7 @@ td.r, th.r { text-align: right; }
       if (d * (tpPx - entry) <= 0) return 'TP ' + P(tpPx) + ' must be ' + (d > 0 ? 'above' : 'below') + ' entry ' + P(entry) + ' for a ' + side;
       if (d * (entry - slPx) <= 0) return 'SL ' + P(slPx) + ' must be ' + (d > 0 ? 'below' : 'above') + ' entry ' + P(entry) + ' for a ' + side;
       var notional = mn.bank * LEV * frac;
-      if (rest) { mn.order = { side: side, lim: lim, notional: notional, tpPx: tpPx, slPx: slPx, t0: Date.now() }; return side + ' limit resting @ ' + P(lim) + ' · TP ' + P(tpPx) + ' SL ' + P(slPx); }
+      if (rest) { logEvent('manual_order', c.key, side, price, { limit: lim, tp: tpPx, sl: slPx, notional: notional }); mn.order = { side: side, lim: lim, notional: notional, tpPx: tpPx, slPx: slPx, t0: Date.now() }; return side + ' limit resting @ ' + P(lim) + ' · TP ' + P(tpPx) + ' SL ' + P(slPx); }
       manualFill(side, price, notional, tpPx, slPx, FEE);
       return side + ' filled @ ' + P(price) + ' · TP ' + P(tpPx) + ' SL ' + P(slPx) + (type === 'limit' ? ' (limit was past market, filled as taker)' : '');
     }
@@ -476,7 +488,7 @@ td.r, th.r { text-align: right; }
       mn.msg = 'closed ' + why + ' ' + (pnl >= 0 ? '+' : '-') + usd(Math.abs(pnl)); mn.pos = null;
     }
     function manualCancel() {
-      if (mn.order) { mn.order = null; mn.msg = 'order cancelled'; }
+      if (mn.order) { logEvent('manual_cancel', c.key, mn.order.side, price, { limit: mn.order.lim }); mn.order = null; mn.msg = 'order cancelled'; }
       else if (mn.pos) manualExit(price, 'manual close', FEE);
     }
     function manualStep() {
@@ -536,6 +548,7 @@ td.r, th.r { text-align: right; }
         verdict.className = 'verdict ' + (cyc.ok ? (cyc.side === 'LONG' ? 'long' : '') : 'idle');
         q('vText').textContent = cyc.ok ? cyc.side + ' ' + usd(bank * LEV) : 'PASS'; q('vSub').textContent = cyc.ok ? 'all gates cleared' : (small ? 'move too small' : 'worth below 0.62');
         if (!cyc.ok) { phase = 0; wait = 8; activate(null); return; }
+        logEvent('signal', c.key, cyc.side, price, { mom6m_pct: +(cyc.m * 100).toFixed(3), scan: +cyc.s.toFixed(2), vet: +cyc.v.toFixed(2), worth: +worth.toFixed(2) });
         phase = 35; q('vText').textContent = 'ASKING LLM'; q('vSub').textContent = 'formula says ' + cyc.side + ', waiting for Claude';
         var ob3 = live.ob || {}, t3 = live.t || {};
         askChief({
@@ -544,10 +557,12 @@ td.r, th.r { text-align: right; }
           history: tradeHist.slice(-5)
         }).then(function (j) {
           cyc.llm = j.action + ' ' + fmt(+j.confidence, 2) + ' ' + (j.reason || '');
+          logEvent('llm', c.key, cyc.side, price, { action: j.action, confidence: +j.confidence, reason: j.reason, agreed: j.action === cyc.side });
           setAgent('chief', j.action, 'LLM ' + fmt(+j.confidence, 2), +j.confidence || 0, 'Claude: ' + (j.reason || ''));
           if (j.action === cyc.side) { verdict.className = 'verdict ' + (cyc.side === 'LONG' ? 'long' : ''); q('vText').textContent = cyc.side + ' ' + usd(bank * LEV); q('vSub').textContent = 'LLM agrees: ' + (j.reason || ''); phase = 4; }
           else { verdict.className = 'verdict idle'; q('vText').textContent = 'PASS'; q('vSub').textContent = 'LLM vetoed: ' + (j.reason || j.action); phase = 0; wait = 60; activate(null); }
         }).catch(function (e) {
+          logEvent('llm_error', c.key, cyc.side, price, { error: String((e && e.message) || e) });
           verdict.className = 'verdict idle'; q('vText').textContent = 'PASS'; q('vSub').textContent = 'LLM Chief offline (' + ((e && e.message) || 'error') + '), no trade'; phase = 0; wait = 60; activate(null);
         });
         return;
@@ -560,6 +575,7 @@ td.r, th.r { text-align: right; }
       if (phase === 5) {
         activate('fills'); var amt = cyc.notional / price;
         pos = { side: cyc.side, entry: price, size: amt, notional: cyc.notional, t0: Date.now() };
+        logEvent('entry', c.key, pos.side, price, { notional: pos.notional });
         marks.push({ t: candles[n - 1].i, p: price, kind: 'open' });
         setAgent('fills', '@ ' + P(price), 'last fill', 1, 'paper fill at last price');
         addRow({ time: hhmmss(), kind: pos.side, size: amt, price: price, notional: pos.notional });

@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.4
+- New table `desk_events` (SQL in `sql/events.sql`). Every step around a trade is now logged: formula signals, Claude's verdict (action, confidence, reason, whether it agreed), market entries, limit-twin orders, fills and misses, manual orders, fills and cancels. Closed trades still go to `paper_trades`.
+- Logging is silent: if the table is missing, the page keeps working and only the ledger counter in the header ignores it.
+- Older v0.8 tab has no ledger; its last closed trades were back-filled once under run `v0.8-backfill` (the tape only keeps the last 5 per coin, so earlier v0.8 trades are lost).
+
 ## v1.3
 - Manual order: TP and SL are now entered as prices (for example TP 5.20, SL 5.75), not percentages. Leave a box blank to use the default +0.40% / −0.20% from the entry price.
 - The panel checks the direction: a SHORT needs TP below and SL above the entry; a LONG needs TP above and SL below. Otherwise it shows a message and does not open the order.
