@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v0.3">
+<meta name="version" content="v0.4">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -128,7 +128,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header>
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v0.3</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v0.4</small></h1>
       <p>6 agents · live BTC price · paper trades only</p>
     </div>
     <div class="pills">
@@ -228,7 +228,7 @@ td.r, th.r { text-align: right; }
   var FEE = 0.00055, LEV = 5, TP = 0.0015, SL = 0.001, MAXHOLD = 90000;
 
   /* ---------- live data: Bybit first, Binance and OKX as backup ---------- */
-  var VERSION = 'v0.3';
+  var VERSION = 'v0.4';
   function jfetch(url) {
     return fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
   }
@@ -236,9 +236,42 @@ td.r, th.r { text-align: right; }
     emaArr = []; var e = candles[0].c;
     candles.forEach(function (k) { e = e + (k.c - e) * (2 / 13); emaArr.push(e); });
   }
-  function setCandles(rows) { candles = rows; rebuildEma(); }
+  var lastTick = 0, tickN = 0, tickPrev = 0, tickRate = 0, ws = null, wsSrc = '';
+  function setCandles(rows) {
+    candles = rows;
+    if (Date.now() - lastTick < 3000) { var k = candles[candles.length - 1]; k.c = price; k.h = Math.max(k.h, price); k.l = Math.min(k.l, price); }
+    rebuildEma();
+  }
+  function onPrice(p) {
+    if (!p || !candles.length) return;
+    price = p; lastTick = Date.now(); tickN++;
+    var k = candles[candles.length - 1];
+    if (lastTick >= k.i + 60000) {
+      candles.push({ i: Math.floor(lastTick / 60000) * 60000, o: k.c, h: Math.max(k.c, p), l: Math.min(k.c, p), c: p, v: 0 });
+      if (candles.length > 70) candles.shift();
+    } else { k.c = p; k.h = Math.max(k.h, p); k.l = Math.min(k.l, p); }
+    rebuildEma();
+  }
+  function openWs(name) {
+    try { if (ws) { ws.onclose = null; ws.close(); } } catch (e) {}
+    wsSrc = name; ws = null;
+    var url = name === 'BYBIT' ? 'wss://stream.bybit.com/v5/public/linear' : name === 'BINANCE' ? 'wss://fstream.binance.com/ws/btcusdt@aggTrade' : '';
+    if (!url) return;
+    try {
+      var w = new WebSocket(url); ws = w;
+      w.onopen = function () { if (name === 'BYBIT') w.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.BTCUSDT'] })); };
+      w.onmessage = function (e) {
+        var m; try { m = JSON.parse(e.data); } catch (x) { return; }
+        if (name === 'BYBIT') { if (m.topic && m.data) m.data.forEach(function (d) { onPrice(+d.p); }); }
+        else if (m.p) onPrice(+m.p);
+      };
+      w.onclose = function () { if (ws === w) wsSrc = ''; };
+      w.onerror = function () { try { w.close(); } catch (x) {} };
+      if (name === 'BYBIT') { var pg = setInterval(function () { if (ws !== w) return clearInterval(pg); if (w.readyState === 1) w.send(JSON.stringify({ op: 'ping' })); }, 20000); }
+    } catch (e) { wsSrc = ''; }
+  }
   function setTicker(t) {
-    live.t = t; price = +t.lastPrice;
+    live.t = t; if (Date.now() - lastTick < 3000) return; price = +t.lastPrice;
     var k = candles[candles.length - 1];
     if (k) { k.c = price; k.h = Math.max(k.h, price); k.l = Math.min(k.l, price); }
   }
@@ -282,6 +315,7 @@ td.r, th.r { text-align: right; }
     var s = SRC[cur];
     Promise.all([s.klines(), s.ticker()]).then(function () {
       live.ok = true; live.src = s.name; live.last = Date.now(); live.err = '';
+      if (wsSrc !== s.name) openWs(s.name);
       if (!live.ob || bookN++ % 3 === 0) return s.book().catch(function () {});
     }).catch(function (e) {
       live.ok = false; live.err = s.name + ' ' + ((e && e.message) || 'blocked');
@@ -468,12 +502,13 @@ td.r, th.r { text-align: right; }
     var e = balHist.length - 1; x.fillStyle = css('--up'); x.beginPath(); x.arc(X(e), Y(balHist[e]), 4, 0, 6.283); x.fill();
   }
   function paintNumbers() {
+    tickRate = tickN - tickPrev; tickPrev = tickN;
     $('bAmt').textContent = usd(bank); $('hBank').textContent = usd(bank);
     $('bSub').textContent = 'P&L ' + (pnlSum >= 0 ? '+' : '-') + usd(Math.abs(pnlSum)) + ' · fees ' + usd(fees) + ' · from ' + usd(START);
     var tot = wins + losses; $('wr').textContent = wins + 'W · ' + losses + 'L · WINRATE ' + (tot ? (wins / tot * 100).toFixed(1) : '0') + '%';
     $('tapeMeta').textContent = fills + ' fills · ' + (pos ? pos.side.toLowerCase() : 'flat') + ' · P&L ' + (pnlSum >= 0 ? '+' : '-') + usd(Math.abs(pnlSum));
     var fd = $('feed'), age = Math.round((Date.now() - live.last) / 1000);
-    if (live.ok) { fd.className = 'pill feed ok'; fd.textContent = 'LIVE · ' + live.src + ' · ' + age + 's'; }
+    if (live.ok) { fd.className = 'pill feed ok'; fd.textContent = 'LIVE · ' + live.src + ' · ' + (Date.now() - lastTick < 3000 ? tickRate + ' ticks/s' : 'no ticks, poll ' + age + 's'); }
     else { fd.className = 'pill feed bad'; fd.textContent = live.err ? 'FEED DOWN · ' + live.err : 'CONNECTING…'; }
     if (live.t) {
       var t = live.t;
@@ -493,7 +528,7 @@ td.r, th.r { text-align: right; }
   }
   AG.forEach(function (a) { setAgent(a.id, '-', '', 0, 'idle'); });
   setAgent('chief', 'FLAT', '', .3, 'waiting for the first scan');
-  poll(0); setInterval(function () { poll(0); }, 3000);
+  poll(0); setInterval(function () { poll(0); }, 2000);
   setInterval(tick, 1000); requestAnimationFrame(frame);
 })();
 </script>

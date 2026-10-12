@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v0.4
+- Trade-by-trade price from the exchange WebSocket, so the price and last candle move many times per second.
+- Badge shows ticks per second.
+- Polling every 2 seconds as backup.
+
 ## v0.3
 - Backup price sources: Binance and OKX if Bybit is blocked.
 - Feed badge shows the source name, or the exact error when down.
