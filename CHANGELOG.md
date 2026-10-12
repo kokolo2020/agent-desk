@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v0.5
+- Price stream tries several exchange WebSocket addresses and switches if one sends nothing for 6 seconds.
+- Book depth is measured on the top of the order book only, so the threshold is now $5M and the metric is renamed book_depth_usd.
+- Chief passes unless the 6-minute move is at least 0.03%, so it stops trading tiny moves that fees would eat.
+
 ## v0.4
 - Trade-by-trade price from the exchange WebSocket, so the price and last candle move many times per second.
 - Badge shows ticks per second.
