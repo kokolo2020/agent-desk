@@ -62,6 +62,24 @@ export async function getMarket(coin) {
   };
 }
 
+/* ---------- Swing features (rallies and pullbacks) ---------- */
+export function features(m) {
+  const k = m.candles, n = k.length, p = m.price;
+  const back = (mins) => k[Math.max(0, n - 1 - mins)].c;
+  const ret = (mins) => ((p - back(mins)) / back(mins)) * 100;
+  const w = k.slice(-60), hi = Math.max.apply(null, w.map((x) => x.h)), lo = Math.min.apply(null, w.map((x) => x.l));
+  const rets = []; for (let i = n - 30; i < n; i++) if (i > 0) rets.push((k[i].c - k[i - 1].c) / k[i - 1].c * 100);
+  const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
+  return {
+    ret_5m: ret(5), ret_15m: ret(15), ret_30m: ret(30), ret_60m: ret(60),
+    pullback_pct: ((hi - p) / hi) * 100,   // how far below the 60m high we are
+    bounce_pct: ((p - lo) / lo) * 100,     // how far above the 60m low we are
+    range_60m: ((hi - lo) / lo) * 100,
+    vol_1m: Math.sqrt(rets.reduce((a, b) => a + (b - mean) * (b - mean), 0) / rets.length)
+  };
+}
+const r4 = (x) => +Number(x).toFixed(4);
+
 /* ---------- Claude ---------- */
 async function claude(key, body) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -134,6 +152,14 @@ async function backfillOutcomes(db, coin, m) {
   }
 }
 
+async function backfillSamples(db, coin, m) {
+  const at = (ts, mins) => { const target = new Date(ts).getTime() + mins * 60000; return m.candles.reduce((b, x) => (Math.abs(x.t - target) < Math.abs(b.t - target) ? x : b), m.candles[0]); };
+  const a = await db.select('ap_samples', 'select=id,ts,price&coin=eq.' + coin + '&fwd_15m=is.null&ts=lt.' + new Date(Date.now() - 16 * 60000).toISOString() + '&ts=gt.' + new Date(Date.now() - 95 * 60000).toISOString());
+  for (const x of a) await db.update('ap_samples', 'id=eq.' + x.id, { fwd_15m: r4(((at(x.ts, 15).c - +x.price) / +x.price) * 100) });
+  const b = await db.select('ap_samples', 'select=id,ts,price&coin=eq.' + coin + '&fwd_60m=is.null&ts=lt.' + new Date(Date.now() - 61 * 60000).toISOString() + '&ts=gt.' + new Date(Date.now() - 98 * 60000).toISOString());
+  for (const x of b) await db.update('ap_samples', 'id=eq.' + x.id, { fwd_60m: r4(((at(x.ts, 60).c - +x.price) / +x.price) * 100) });
+}
+
 const SYSTEM = 'You are CHIEF of an autonomous PAPER trading desk (no real money, 5x leverage on a $150 bank). Taker fees are 0.11% round trip, so a trade needs a move well above that to pay. Decide LONG, SHORT or PASS for the coin right now, using the market snapshot, the latest news analysis, and the desk\'s own recent results. Be selective: PASS is the default, and most setups are not worth the fees. Trade only when price action and a real catalyst or clear trend agree, and do not chase a move that already happened. If recent decisions of the same kind lost money or moved against us, say so and adjust. You choose the exit plan: tp_pct (take profit, 0.4 to 3), sl_pct (stop, 0.25 to 1.5), hold_min (15 to 360); tp_pct must be at least 1.5x sl_pct. Reply with ONLY JSON: {"action":"LONG"|"SHORT"|"PASS","confidence":0..1,"reason":"max 220 chars","tp_pct":number,"sl_pct":number,"hold_min":number}';
 
 export async function tick(env, coin) {
@@ -146,6 +172,11 @@ export async function tick(env, coin) {
   const bank = START + closedAll.reduce((s, x) => s + +x.pnl, 0);
   out.bank = +bank.toFixed(2);
 
+  const F = features(m);
+  const newsNow = (await db.select('ap_news', 'select=sentiment,strength,ts&coin=eq.' + coin + '&order=ts.desc&limit=1'))[0];
+  const newsFresh = newsNow && Date.now() - new Date(newsNow.ts).getTime() < 6 * 3600000;
+  await db.insert('ap_samples', { coin, price: m.price, ret_5m: r4(F.ret_5m), ret_15m: r4(F.ret_15m), ret_30m: r4(F.ret_30m), ret_60m: r4(F.ret_60m), pullback_pct: r4(F.pullback_pct), bounce_pct: r4(F.bounce_pct), range_60m: r4(F.range_60m), vol_1m: r4(F.vol_1m), change24h: r4(m.change24h_pct), funding: r4(m.funding_pct), spread_bps: r4(m.spread_bps), news_sentiment: newsFresh ? newsNow.sentiment : null, news_strength: newsFresh ? +newsNow.strength : null });
+  await backfillSamples(db, coin, m).catch(() => {});
   const open = (await db.select('ap_positions', 'select=*&coin=eq.' + coin + '&status=eq.open&limit=1'))[0];
   if (open) {
     const r = await manageOpen(db, open, m);
@@ -168,7 +199,7 @@ export async function tick(env, coin) {
   const trades = await db.select('ap_positions', 'select=side,pnl,close_reason,opened_at&coin=eq.' + coin + '&status=eq.closed&order=closed_at.desc&limit=6');
   const ctx = {
     coin, now: new Date().toISOString(), bank: +bank.toFixed(2),
-    market: { price: m.price, mom6m_pct: +m.mom6m_pct.toFixed(3), change24h_pct: +m.change24h_pct.toFixed(2), funding_pct: +m.funding_pct.toFixed(4), spread_bps: +m.spread_bps.toFixed(2), book_depth_usd: Math.round(m.book_depth_usd), closes_1m_last30: m.candles.slice(-30).map((k) => k.c) },
+    market: { price: m.price, mom6m_pct: +m.mom6m_pct.toFixed(3), change24h_pct: +m.change24h_pct.toFixed(2), funding_pct: +m.funding_pct.toFixed(4), spread_bps: +m.spread_bps.toFixed(2), book_depth_usd: Math.round(m.book_depth_usd), swings: { ret_15m_pct: r4(F.ret_15m), ret_30m_pct: r4(F.ret_30m), ret_60m_pct: r4(F.ret_60m), pullback_from_60m_high_pct: r4(F.pullback_pct), bounce_from_60m_low_pct: r4(F.bounce_pct), range_60m_pct: r4(F.range_60m), vol_1m_pct: r4(F.vol_1m) }, closes_1m_last30: m.candles.slice(-30).map((k) => k.c) },
     news: news ? { age_hours: +newsAgeH.toFixed(1), sentiment: news.sentiment, strength: +news.strength, catalyst: news.catalyst, summary: news.summary } : 'no news scan yet',
     recent_decisions: hist.map((d) => ({ minutes_ago: Math.round((Date.now() - new Date(d.ts).getTime()) / 60000), action: d.action, confidence: +d.confidence, taken: d.taken, move_after_15m_pct: d.outcome_price ? +(((+d.outcome_price - +d.price) / +d.price) * 100).toFixed(3) : null, reason: String(d.reason || '').slice(0, 120) })),
     recent_closed_trades: trades.map((x) => ({ side: x.side, pnl: +(+x.pnl).toFixed(2), exit: x.close_reason }))

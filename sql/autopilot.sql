@@ -24,6 +24,20 @@ create table if not exists ap_news (
   ts timestamptz not null default now(),
   coin text not null, sentiment text, strength numeric, catalyst text, summary text, sources jsonb
 );
+-- Market snapshots every 5 minutes with what happened next, for pattern mining (no trading involved).
+create table if not exists ap_samples (
+  id bigint generated always as identity primary key,
+  ts timestamptz not null default now(),
+  coin text not null, price numeric not null,
+  ret_5m numeric, ret_15m numeric, ret_30m numeric, ret_60m numeric,
+  pullback_pct numeric, bounce_pct numeric, range_60m numeric, vol_1m numeric,
+  change24h numeric, funding numeric, spread_bps numeric,
+  news_sentiment text, news_strength numeric,
+  fwd_15m numeric, fwd_60m numeric
+);
+create index if not exists ap_samples_coin_ts on ap_samples (coin, ts desc);
+alter table ap_samples enable row level security;
+create policy "anon read samples" on ap_samples for select to anon using (true);
 alter table ap_positions enable row level security;
 alter table ap_decisions enable row level security;
 alter table ap_news enable row level security;
