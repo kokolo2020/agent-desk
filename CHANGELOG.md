@@ -2,6 +2,12 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.1
+- Limit-order twin on each coin. When the market desk enters (after the LLM Chief agrees), the twin rests a limit order at the near side of the book (long at the bid, short at the ask) instead of paying the spread.
+- Fills only if price trades through the limit by 0.01%. If not filled within 3 minutes it counts as missed.
+- Fees: maker 0.02% on entry and on take profit; taker 0.055% on stop and time exit. Same TP +0.40%, SL −0.20%, 15 min max hold. Own $150 bank.
+- New "Limit twin" panel per coin compares limit vs market (wins, losses, filled, missed, P&L, fees). Twin trades are saved to Supabase with run `v1.1-limit`; market trades with run `v1.1`.
+
 ## Autopilot v1 (separate from the dashboard versions)
 - New server-side desk that runs on Netlify with no browser open. Every 5 minutes it manages open paper trades and, when the market moves or news is hot, asks Claude for LONG, SHORT or PASS.
 - News: every 2 hours per coin, Claude searches the web for catalysts from the last 48 hours and stores a summary, sentiment and strength in Supabase.
