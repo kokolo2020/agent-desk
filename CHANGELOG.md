@@ -2,6 +2,13 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.7
+- Fade bot on each coin, copying the manual range pattern (7 wins, 1 loss on NEAR). Own $150 bank, compounding, runs on its own with no clicks.
+- Rules: only in a range wide enough to beat fees (30-minute high to low of at least 0.8%); price at least 0.25% away from its 20-minute average; buy the dip or short the bounce only once price has turned (no catching a falling knife). Take profit 0.5% (maker), stop 0.8%, exit after 6 minutes, 60-second cooldown.
+- Entry is market (taker 0.055%), take profit is a limit (maker 0.02%), stop and time exit are taker. Round trip is about $0.80 on a $750 position.
+- Closed trades saved to Supabase under run `v1.7-fade`; entries logged as `fade_entry` in `desk_events`.
+- The numbers are first guesses from 8 manual trades, to be tuned on real data.
+
 ## v1.6
 - Manual order: TP and SL boxes reset to blank after every close or cancel. A blank box now means the default: TP 3% in profit and SL 3% against, from the entry price (before: +0.4% / −0.2%).
 - You can still type your own prices, or change them later with UPDATE TP / SL.
