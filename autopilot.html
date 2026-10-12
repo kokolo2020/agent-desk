@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="version" content="ap-v1.0">
+<title>Autopilot</title>
+<style>
+  :root { --bg:#0b0f14; --card:#121922; --line:#1f2a37; --text:#e6edf3; --mut:#8b98a8; --up:#3ddc97; --down:#ff6b6b; --acc:#6aa9ff; }
+  :root:not([data-theme="dark"]) { }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f4f6f9; --card:#fff; --line:#dde3ea; --text:#17202b; --mut:#5b6b7d; --up:#13875a; --down:#c93c3c; --acc:#2563c9; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; } h1 small { color:var(--mut); font-weight:500; font-size:12px; }
+  .sub { color:var(--mut); font-size:12px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .row { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  .big { font-size:26px; font-weight:650; } .mut { color:var(--mut); } .up { color:var(--up); } .down { color:var(--down); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; border:1px solid var(--line); font-size:11px; color:var(--mut); }
+  h2 { font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); margin:18px 0 8px; }
+  .dec { border-top:1px solid var(--line); padding:9px 0; } .dec:first-child { border-top:0; }
+  .news { font-size:13px; } a { color:var(--acc); }
+  .err { color:var(--down); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AUTOPILOT <small>paper money · decided by Claude · runs on the server</small></h1>
+  <div class="sub" id="status">loading…</div>
+  <div class="grid" id="desks"></div>
+  <h2>Latest decisions</h2><div class="card" id="decs"></div>
+  <h2>Latest news scans</h2><div class="grid" id="news"></div>
+  <p class="sub">Paper trading only. Nothing here places real orders. <a href="/">Back to the formula desk</a></p>
+</div>
+<script>
+(function () {
+  var URL = 'https://seiqqvplosnwquaksshm.supabase.co/rest/v1/';
+  var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXFxdnBsb3Nud3F1YWtzc2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTAzMTUsImV4cCI6MjA5ODYyNjMxNX0.FPcGOaZqdAXje_BI1a8BKYQrMi5uS2zm0Oy3hopZdho';
+  var START = 150;
+  function get(t, q) { return fetch(URL + t + '?' + q, { headers: { apikey: KEY, Authorization: 'Bearer ' + KEY } }).then(function (r) { if (!r.ok) throw new Error(t + ' ' + r.status); return r.json(); }); }
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var money = function (n) { return (n < 0 ? '-' : '') + '$' + Math.abs(n).toFixed(2); };
+  var ago = function (iso) { var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 60 ? m + 'm ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; };
+  function load() {
+    Promise.all([get('ap_positions', 'select=*&order=opened_at.desc&limit=300'), get('ap_decisions', 'select=*&order=ts.desc&limit=25'), get('ap_news', 'select=*&order=ts.desc&limit=6')]).then(function (r) {
+      var pos = r[0], decs = r[1], news = r[2], html = '';
+      ['BTC', 'NEAR'].forEach(function (c) {
+        var mine = pos.filter(function (p) { return p.coin === c; }), closed = mine.filter(function (p) { return p.status === 'closed'; });
+        var pnl = closed.reduce(function (s, p) { return s + +p.pnl; }, 0), fees = closed.reduce(function (s, p) { return s + +p.fees; }, 0);
+        var wins = closed.filter(function (p) { return +p.pnl >= 0; }).length, open = mine.filter(function (p) { return p.status === 'open'; })[0];
+        html += '<div class="card"><div class="row"><b>' + c + ' / USDT</b><span class="pill">paper</span></div>' +
+          '<div class="big ' + (pnl >= 0 ? 'up' : 'down') + '">' + money(START + pnl) + '</div>' +
+          '<div class="mut">P&amp;L ' + money(pnl) + ' · fees ' + money(fees) + ' · ' + closed.length + ' trades · ' + wins + 'W ' + (closed.length - wins) + 'L</div>' +
+          '<div style="margin-top:8px">' + (open ? '<b>' + esc(open.side) + '</b> from ' + (+open.entry_price) + ' · TP ' + (+open.tp) + ' · SL ' + (+open.sl) + ' <span class="mut">(' + ago(open.opened_at) + ')</span>' : '<span class="mut">flat, waiting for a good setup</span>') + '</div></div>';
+      });
+      $('desks').innerHTML = html;
+      $('decs').innerHTML = decs.length ? decs.map(function (d) {
+        var mv = d.outcome_price ? ((+d.outcome_price - +d.price) / +d.price * 100) : null;
+        return '<div class="dec"><div class="row"><span><b>' + esc(d.coin) + ' ' + esc(d.action) + '</b> <span class="mut">conf ' + (+d.confidence).toFixed(2) + (d.taken ? ' · traded' : ' · no trade') + '</span></span><span class="mut">' + ago(d.ts) + '</span></div>' +
+          '<div>' + esc(d.reason) + '</div>' + (mv != null ? '<div class="mut">price 15m later: ' + (mv >= 0 ? '+' : '') + mv.toFixed(2) + '%</div>' : '') + '</div>';
+      }).join('') : '<span class="mut">No decisions yet. Claude is only asked when the market moves or news is hot.</span>';
+      $('news').innerHTML = news.length ? news.map(function (n) {
+        var src = (n.sources || []).slice(0, 2).map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">source</a>'; }).join(' · ');
+        return '<div class="card news"><div class="row"><b>' + esc(n.coin) + '</b><span class="pill">' + esc(n.sentiment) + ' · ' + (+n.strength).toFixed(2) + '</span></div><div><b>' + esc(n.catalyst) + '</b></div><div>' + esc(n.summary) + '</div><div class="mut">' + ago(n.ts) + ' ' + src + '</div></div>';
+      }).join('') : '<div class="card mut">No news scan yet (runs every 2 hours).</div>';
+      $('status').textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · refreshes every 30s';
+    }).catch(function (e) { $('status').innerHTML = '<span class="err">could not load: ' + esc(e.message) + '</span>'; });
+  }
+  load(); setInterval(load, 30000);
+})();
+</script>
+</body>
+</html>

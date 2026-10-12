@@ -2,6 +2,13 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## Autopilot v1 (separate from the dashboard versions)
+- New server-side desk that runs on Netlify with no browser open. Every 5 minutes it manages open paper trades and, when the market moves or news is hot, asks Claude for LONG, SHORT or PASS.
+- News: every 2 hours per coin, Claude searches the web for catalysts from the last 48 hours and stores a summary, sentiment and strength in Supabase.
+- Claude chooses its own take profit, stop and hold time (longer holds allowed), sees its own recent decisions and what price did 15 minutes later, and stays flat by default.
+- Viewer page: `/autopilot.html`. Tables: `ap_positions`, `ap_decisions`, `ap_news` (SQL in `sql/autopilot.sql`).
+- Paper money only. No exchange keys, no real orders.
+
 ## v1.0
 - LLM Chief. When the formula wants a trade, the desk asks a Claude model (through a small Netlify function that holds the API key) and only enters if Claude agrees. Claude sees the price, 6-minute move, spread, depth, funding, recent closes and the last 5 closed trades.
 - Claude's reason shows on the desk and is saved in the ledger `reason` column (`| llm: ...`).
