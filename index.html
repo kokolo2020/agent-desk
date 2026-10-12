@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Agent Desk</title>
+<style>html,body{margin:0;background:#0b0b0e}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: one dark trading-desk screen. Header strip, six agent cards, main candle chart with agent graph overlay, balance line, then activity tape beside the verdict panel. */
+:root {
+  --bg: #0b0b0e;
+  --surface: #131318;
+  --surface-2: #1a1a21;
+  --line: #2a2a33;
+  --fg: #f3f3f6;
+  --muted: #8b8b96;
+  --up: #3ddc97;
+  --down: #ff5a5f;
+  --chief: #f3f3f6;
+  --scan: #7ddc4a;
+  --vet: #ff5a5f;
+  --size: #ff5fa2;
+  --fills: #4a9dff;
+  --risk: #ffa31a;
+  --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--mono); font-size: 12px; padding-inline: 16px; padding-block: 16px 32px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.num { font-variant-numeric: tabular-nums; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.brand h1 { margin: 0; font: 800 28px/1 var(--display); letter-spacing: -0.02em; }
+.brand p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--surface); color: var(--muted); font-size: 11px; white-space: nowrap; }
+.pill b { color: var(--fg); font-weight: 500; }
+.pill.clock { background: var(--fg); color: var(--bg); font-weight: 700; font-size: 15px; }
+.pill.sim { color: var(--risk); border-color: color-mix(in srgb, var(--risk) 45%, var(--line)); }
+
+.agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.agent { --c: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; transition: border-color .25s, box-shadow .25s; }
+.agent.on { border-color: var(--c); box-shadow: 0 0 0 1px var(--c), 0 0 22px -6px var(--c); }
+.face { width: 44px; height: 44px; border-radius: 12px; background: color-mix(in srgb, var(--c) 20%, var(--surface-2)); display: grid; place-items: center; }
+.face i { display: block; width: 24px; height: 20px; border-radius: 9px 9px 11px 11px; background: var(--c); position: relative; }
+.face i::before, .face i::after { content: ""; position: absolute; top: 7px; width: 3px; height: 5px; border-radius: 2px; background: var(--bg); }
+.face i::before { left: 6px; } .face i::after { right: 6px; }
+.agent.on .face i { animation: bob .6s ease-in-out infinite alternate; }
+@keyframes bob { to { transform: translateY(-3px); } }
+.a-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.a-name { font: 800 17px/1 var(--display); color: var(--c); letter-spacing: .01em; }
+.tag { font-size: 9px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; letter-spacing: .08em; }
+.a-role { color: var(--muted); font-size: 11px; margin: 3px 0 8px; }
+.a-val { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 15px; font-weight: 500; }
+.a-val small { color: var(--muted); font-size: 10px; font-weight: 400; }
+.bar { height: 3px; background: var(--line); border-radius: 2px; margin: 6px 0; overflow: hidden; }
+.bar span { display: block; height: 100%; width: 0; background: var(--c); transition: width .5s; }
+.a-quote { color: var(--muted); font-size: 10.5px; min-height: 1.3em; overflow-wrap: anywhere; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; }
+.chart-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.sym { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; background: var(--surface-2); }
+.coin { width: 26px; height: 26px; border-radius: 50%; background: #f7931a; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.sym b { font: 800 15px var(--display); display: block; }
+.sym small { color: var(--muted); font-size: 9px; }
+.sym .px { font-size: 18px; font-weight: 700; margin-left: 6px; }
+.stat { color: var(--muted); font-size: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
+.stat b { color: var(--fg); font-weight: 500; }
+.tf { margin-left: auto; display: flex; gap: 4px; }
+.tf span { padding: 4px 8px; border-radius: 6px; color: var(--muted); font-size: 10px; }
+.tf span.sel { background: var(--surface-2); color: var(--fg); }
+.legend { color: var(--muted); font-size: 10px; margin-bottom: 6px; overflow-wrap: anywhere; }
+canvas { display: block; width: 100%; }
+#chart { height: 360px; }
+#bal { height: 130px; }
+
+.balance { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+.big { text-align: right; }
+.big .amt { font: 800 clamp(30px, 6vw, 48px)/1 var(--display); letter-spacing: -0.02em; }
+.big .sub { color: var(--muted); font-size: 10px; margin-top: 6px; }
+.big .wr { color: var(--muted); font-size: 10px; margin-bottom: 6px; }
+.label { color: var(--muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+
+.bottom { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 12px; }
+h2 { font: 800 16px var(--display); margin: 0 0 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+h2 small { font: 400 10px var(--mono); color: var(--muted); }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 440px; }
+th { text-align: left; color: var(--muted); font-weight: 400; font-size: 9px; letter-spacing: .1em; padding: 4px 6px; }
+td { padding: 7px 6px; border-top: 1px solid var(--line); white-space: nowrap; }
+tr.new td { animation: flash 1.2s ease-out; }
+@keyframes flash { from { background: color-mix(in srgb, var(--fills) 25%, transparent); } }
+td.r, th.r { text-align: right; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -2px; }
+.side { background: var(--surface-2); border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 700; }
+.up { color: var(--up); } .down { color: var(--down); } .mut { color: var(--muted); }
+
+.metric { display: grid; grid-template-columns: 110px minmax(0, 1fr) 96px; gap: 10px; align-items: center; padding: 5px 0; font-size: 11px; }
+.metric .m-bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.metric .m-bar span { display: block; height: 100%; background: var(--fg); transition: width .5s; }
+.metric .m-v { text-align: right; }
+.metric .k { color: var(--muted); overflow-wrap: anywhere; }
+.verdict { margin-top: 10px; border-radius: 12px; padding: 14px; font: 800 20px var(--display); display: flex; justify-content: space-between; align-items: center; gap: 8px; background: color-mix(in srgb, var(--down) 80%, #000); color: #fff; transition: background .3s; }
+.verdict.long { background: color-mix(in srgb, var(--up) 70%, #000); }
+.verdict.idle { background: var(--surface-2); color: var(--muted); }
+.verdict small { font: 400 10px var(--mono); opacity: .8; }
+.foot { color: var(--muted); font-size: 10px; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  .bottom { grid-template-columns: minmax(0, 1fr); }
+  .balance { grid-template-columns: minmax(0, 1fr); }
+  .big { text-align: left; }
+  #chart { height: 280px; }
+  .tf { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .agent.on .face i, tr.new td { animation: none; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>AGENT DESK</h1>
+      <p>6 agents · 1 crawler · trading BTC while you sleep</p>
+    </div>
+    <div class="pills">
+      <span class="pill sim">SIMULATED DATA · PAPER ONLY</span>
+      <span class="pill">BANK <b class="num" id="hBank">$2,000.00</b></span>
+      <span class="pill">BTC <b class="num" id="hBtc">92,138.95</b></span>
+      <span class="pill clock num" id="clock">00:00 UTC</span>
+    </div>
+  </header>
+
+  <section class="agents" id="agents"></section>
+
+  <section class="panel">
+    <div class="chart-head">
+      <div class="sym"><span class="coin">B</span><div><b>BTC / USDT</b><small>PERP · CROSS 10x</small></div><span class="px num" id="cPx">92,138.95</span></div>
+      <span class="stat">24H VOL <b class="num">$38.4B</b></span>
+      <span class="stat">OPEN INT <b class="num">$31.2B</b></span>
+      <span class="stat">FUNDING <b class="num" id="fund">+0.0020%</b></span>
+      <div class="tf"><span>1s</span><span class="sel">1m</span><span>5m</span><span>1h</span></div>
+    </div>
+    <div class="legend num" id="legend"></div>
+    <canvas id="chart" aria-label="BTC candle chart with agent graph overlay"></canvas>
+  </section>
+
+  <section class="panel balance">
+    <div>
+      <div class="label"><span>Balance · live</span></div>
+      <canvas id="bal" aria-label="Balance over time"></canvas>
+    </div>
+    <div class="big">
+      <div class="wr num" id="wr">0W · 0L · WINRATE 0%</div>
+      <div class="amt num" id="bAmt">$2,000.00</div>
+      <div class="sub num" id="bSub">P&amp;L +$0.00 · fees $0.00 · from $2,000.00</div>
+    </div>
+  </section>
+
+  <section class="bottom">
+    <div class="panel">
+      <h2>Activity tape <small class="num" id="tapeMeta">0 fills · flat</small></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>TIME</th><th>SIDE</th><th class="r">SIZE</th><th class="r">PRICE</th><th class="r">NOTIONAL</th><th class="r">P&amp;L</th></tr></thead>
+          <tbody id="tape"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Verdict <small>thresholds.py</small></h2>
+      <div id="metrics"></div>
+      <div class="verdict idle" id="verdict"><span id="vText">WAITING</span><small id="vSub">scan → vet → chief</small></div>
+    </div>
+  </section>
+
+  <p class="foot">Every number on this page is random and generated in your browser. Nothing here is a real trade or a signal. Replace <code>tick()</code> with a Supabase realtime subscription to show real events.</p>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = function (n, d) { return Number(n).toLocaleString('en-US', { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d }); };
+  var usd = function (n) { return (n < 0 ? '-' : '') + '$' + fmt(Math.abs(n)); };
+  var rnd = function (a, b) { return a + Math.random() * (b - a); };
+  var css = function (v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
+
+  /* ---------- agents ---------- */
+  var AG = [
+    { id: 'chief', name: 'CHIEF', role: 'never takes a position', tag: 'ONLINE', c: '--chief' },
+    { id: 'scan', name: 'SCAN', role: 'finding what moves', tag: 'ASKS JEV', c: '--scan' },
+    { id: 'vet', name: 'VET', role: 'is the move real', tag: 'ASKS JEV', c: '--vet' },
+    { id: 'size', name: 'SIZE', role: 'how much', tag: 'MATH', c: '--size' },
+    { id: 'fills', name: 'FILLS', role: 'execution', tag: 'MATH', c: '--fills' },
+    { id: 'risk', name: 'RISK', role: 'closing', tag: 'MATH', c: '--risk' }
+  ];
+  var host = $('agents');
+  AG.forEach(function (a) {
+    var el = document.createElement('div');
+    el.className = 'agent';
+    el.style.setProperty('--c', 'var(' + a.c + ')');
+    el.innerHTML = '<div class="face"><i></i></div><div><div class="a-top"><span class="a-name">' + a.name + '</span><span class="tag">' + a.tag + '</span></div>' +
+      '<div class="a-role">' + a.role + '</div><div class="a-val num"><small id="' + a.id + 'L"></small><span id="' + a.id + 'V">-</span></div>' +
+      '<div class="bar"><span id="' + a.id + 'B"></span></div><div class="a-quote" id="' + a.id + 'Q">idle</div></div>';
+    host.appendChild(el);
+    a.el = el;
+  });
+  var byId = {}; AG.forEach(function (a) { byId[a.id] = a; });
+  function setAgent(id, val, label, pct, quote) {
+    $(id + 'V').textContent = val; $(id + 'L').textContent = label || '';
+    $(id + 'B').style.width = Math.round(pct * 100) + '%'; $(id + 'Q').textContent = quote || '';
+  }
+  function activate(id) { AG.forEach(function (a) { a.el.classList.toggle('on', a.id === id); }); active = id; }
+
+  /* ---------- state ---------- */
+  var START = 2000, bank = 2000, pnlSum = 0, fees = 0, wins = 0, losses = 0, fills = 0;
+  var price = 92138.95, idx = 0, candles = [], ema = price, emaArr = [];
+  var trades = [], marks = [], balHist = [], pos = null, active = null;
+  var bias = 1, phase = 0, cycle = {};
+  for (var i = 0; i < 70; i++) pushCandle(true);
+  balHist.push(bank, bank);
+
+  function pushCandle(quiet) {
+    var o = price, drift = (bias * 4) + rnd(-40, 40);
+    var c = o + drift + (Math.random() < .08 ? rnd(-180, 220) : 0);
+    var h = Math.max(o, c) + rnd(5, 60), l = Math.min(o, c) - rnd(5, 60);
+    candles.push({ o: o, h: h, l: l, c: c, v: rnd(20, 100) * (Math.abs(c - o) / 40 + .5), i: idx++ });
+    price = c; ema = ema + (price - ema) * (2 / 13); emaArr.push(ema);
+    if (candles.length > 70) { candles.shift(); emaArr.shift(); }
+  }
+
+  /* ---------- thresholds panel ---------- */
+  var MET = [
+    ['depth_1pct_usd', 351e6, 120e6, function (v) { return '$' + fmt(v, 0); }],
+    ['spread_bps', 1.09, 3, function (v) { return fmt(v, 2); }, true],
+    ['funding_rate', 0.0004, 0.02, function (v) { return fmt(-v, 4) + '%'; }, true],
+    ['oi_change_1h', 2.88, 5, function (v) { return '+' + fmt(v, 2) + '%'; }],
+    ['cvd_slope_5m', 0.86, 1, function (v) { return fmt(v, 2); }],
+    ['liq_cluster_usd', 156e6, 300e6, function (v) { return '$' + fmt(v, 0); }],
+    ['whale_flow_btc', 144.57, 300, function (v) { return fmt(v, 2) + ' BTC'; }]
+  ];
+  var mHost = $('metrics');
+  MET.forEach(function (m, k) {
+    var d = document.createElement('div'); d.className = 'metric num';
+    d.innerHTML = '<span class="k">' + m[0] + '</span><span class="m-bar"><span id="mb' + k + '"></span></span><span class="m-v" id="mv' + k + '"></span>';
+    mHost.appendChild(d);
+  });
+  function refreshMetrics() {
+    MET.forEach(function (m, k) {
+      var v = m[1] * rnd(.7, 1.25), pct = Math.min(1, v / m[2]);
+      $('mb' + k).style.width = Math.round(pct * 100) + '%';
+      $('mv' + k).innerHTML = m[3](v) + ' <span class="up">✓</span>';
+    });
+  }
+
+  /* ---------- activity tape ---------- */
+  var rowsHtml = [];
+  function addRow(t) {
+    var tr = document.createElement('tr'); tr.className = 'new';
+    var dotc = t.kind === 'CLOSE' ? (t.pnl >= 0 ? '--risk' : '--vet') : '--fills';
+    tr.innerHTML = '<td class="mut"><span class="dot" style="background:var(' + dotc + ')"></span> ' + t.time + '</td>' +
+      '<td><span class="side">' + t.kind + '</span></td><td class="r">' + fmt(t.size, 4) + ' BTC</td><td class="r">' + fmt(t.price) + '</td><td class="r">' + usd(t.notional).replace('-', '') + '</td>' +
+      '<td class="r ' + (t.kind === 'CLOSE' ? (t.pnl >= 0 ? 'up' : 'down') : 'mut') + '">' + (t.kind === 'CLOSE' ? (t.pnl >= 0 ? '+' : '-') + usd(Math.abs(t.pnl)) : 'open') + '</td>';
+    var tb = $('tape'); tb.insertBefore(tr, tb.firstChild);
+    while (tb.children.length > 10) tb.removeChild(tb.lastChild);
+    fills++;
+    $('tapeMeta').textContent = fills + ' fills · ' + (pos ? 'long' : 'flat') + ' · P&L ' + (pnlSum >= 0 ? '+' : '-') + usd(Math.abs(pnlSum));
+  }
+  var hhmmss = function () { var d = new Date(); return d.toISOString().slice(11, 19); };
+
+  /* ---------- pipeline: one step per tick ---------- */
+  var QUOTES = {
+    scan: ['momentum 1m · volume confirms', 'range break on rising volume', 'bids stacking under spot'],
+    vet: ['bids 3.0x asks within 0.5%', 'book depth holds, not a spoof', 'no wall pulled in last 30s'],
+    chief: ['question set · bias', 'two of three agree', 'conviction above gate'],
+    size: ['margin fits, liquidation far away', '10 percent of the bank per ticket', 'leverage inside cap'],
+    fills: ['no entry without a flush first', 'limit filled at touch', 'slippage under 1 bps'],
+    risk: ['no size up after a red ticket', 'take profit hit', 'stop honored']
+  };
+  var pick = function (a) { return a[Math.floor(Math.random() * a.length)]; };
+  function step() {
+    phase = (phase + 1) % 9;
+    var verdict = $('verdict');
+    if (phase === 1) {
+      cycle = { s: rnd(.55, .9), v: rnd(.55, .9), lev: rnd(10, 15.5) };
+      bias = Math.random() < .6 ? 1 : -1;
+      activate('scan'); setAgent('scan', cycle.s.toFixed(2), 'momentum.1m', cycle.s, '"' + pick(QUOTES.scan) + '"');
+      refreshMetrics(); verdict.className = 'verdict idle'; $('vText').textContent = 'SCANNING'; $('vSub').textContent = 'scan → vet → chief';
+    } else if (phase === 2) {
+      activate('vet'); setAgent('vet', cycle.v.toFixed(2), 'book_depth', cycle.v, '"' + pick(QUOTES.vet) + '"');
+    } else if (phase === 3) {
+      var worth = (cycle.s + cycle.v) / 2, ok = worth >= .62;
+      cycle.ok = ok; cycle.side = bias > 0 ? 'LONG' : 'SHORT';
+      activate('chief'); setAgent('chief', cycle.side, 'worth ' + worth.toFixed(2), worth, '"' + (ok ? pick(QUOTES.chief) : 'below gate, pass') + '"');
+      verdict.className = 'verdict ' + (ok ? (bias > 0 ? 'long' : '') : 'idle');
+      $('vText').textContent = ok ? cycle.side + ' ' + usd(bank * cycle.lev) : 'PASS'; $('vSub').textContent = ok ? 'all gates cleared' : 'worth below 0.62';
+    } else if (phase === 4 && cycle.ok) {
+      activate('size'); var notional = bank * cycle.lev; cycle.notional = notional;
+      setAgent('size', usd(notional), 'lev ' + cycle.lev.toFixed(1) + 'x', cycle.lev / 20, '"' + pick(QUOTES.size) + '"');
+    } else if (phase === 5 && cycle.ok) {
+      activate('fills'); var amt = cycle.notional / price;
+      pos = { side: cycle.side, price: price, size: amt, notional: cycle.notional, i: idx };
+      trades.push(pos); marks.push({ i: idx, side: cycle.side, kind: 'open', p: price });
+      setAgent('fills', '@ ' + fmt(price), 'last fill', 1, '"' + pick(QUOTES.fills) + '"');
+      addRow({ time: hhmmss(), kind: pos.side, size: amt, price: price, notional: cycle.notional });
+      $('hBank').textContent = usd(bank);
+    } else if (phase === 7 && pos) {
+      activate('risk');
+      var move = (pos.side === 'LONG' ? 1 : -1) * rnd(-.0007, .0016) * (Math.random() < .83 ? 1 : -.5), pnl = pos.notional * Math.abs(move) * (move >= 0 ? 1 : -1);
+      var fee = pos.notional * .00004, closePx = price;
+      pnl = pnl - fee; fees += fee; pnlSum += pnl; bank += pnl; pnl >= 0 ? wins++ : losses++;
+      marks.push({ i: idx, side: pos.side, kind: 'close', p: closePx });
+      addRow({ time: hhmmss(), kind: 'CLOSE', size: pos.size, price: closePx, notional: pos.notional, pnl: pnl });
+      setAgent('risk', wins + 'W ' + losses + 'L', 'closed', wins / Math.max(1, wins + losses), '"' + (pnl >= 0 ? pick(QUOTES.risk) : 'no size up after a red ticket') + '"');
+      pos = null; balHist.push(bank); if (balHist.length > 90) balHist.shift();
+    } else if (phase === 8) {
+      activate(null);
+    }
+  }
+
+  /* ---------- drawing ---------- */
+  function fit(c) {
+    var r = c.getBoundingClientRect(), d = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.round(r.width * d), h = Math.round(r.height * d);
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    var x = c.getContext('2d'); x.setTransform(d, 0, 0, d, 0, 0); return { x: x, w: r.width, h: r.height };
+  }
+  var nodePos = [[.5, .5], [.12, .22], [.3, .1], [.7, .1], [.88, .24], [.68, .42], [.28, .4]];
+  function drawChart(tm) {
+    var f = fit($('chart')), x = f.x, W = f.w, H = f.h;
+    x.clearRect(0, 0, W, H);
+    var padR = 62, padB = 22, volH = H * .18, ch = H - padB - volH - 6, cw = W - padR;
+    var lo = Infinity, hi = -Infinity, vmax = 0;
+    candles.forEach(function (k) { lo = Math.min(lo, k.l); hi = Math.max(hi, k.h); vmax = Math.max(vmax, k.v); });
+    var pad = (hi - lo) * .06; lo -= pad; hi += pad;
+    var Y = function (p) { return 4 + (hi - p) / (hi - lo) * (ch - 8); };
+    var step = cw / candles.length, bw = Math.max(2, step * .56);
+    x.font = '10px ' + css('--mono'); x.textBaseline = 'middle';
+    x.strokeStyle = css('--line'); x.fillStyle = css('--muted'); x.lineWidth = 1;
+    for (var g = 0; g <= 5; g++) {
+      var p = lo + (hi - lo) * g / 5, yy = Y(p);
+      x.globalAlpha = .5; x.beginPath(); x.moveTo(0, yy); x.lineTo(cw, yy); x.stroke(); x.globalAlpha = 1;
+      x.textAlign = 'left'; x.fillText(fmt(p), cw + 8, yy);
+    }
+    var up = css('--up'), dn = css('--down');
+    candles.forEach(function (k, n) {
+      var cx = n * step + step / 2, col = k.c >= k.o ? up : dn;
+      x.strokeStyle = col; x.fillStyle = col;
+      x.beginPath(); x.moveTo(cx, Y(k.h)); x.lineTo(cx, Y(k.l)); x.stroke();
+      var t = Y(Math.max(k.o, k.c)), b = Y(Math.min(k.o, k.c));
+      x.fillRect(cx - bw / 2, t, bw, Math.max(1.5, b - t));
+      x.globalAlpha = .45; x.fillRect(cx - bw / 2, H - padB - k.v / vmax * volH, bw, k.v / vmax * volH); x.globalAlpha = 1;
+    });
+    x.strokeStyle = css('--fg'); x.globalAlpha = .5; x.lineWidth = 1.2; x.beginPath();
+    emaArr.forEach(function (e, n) { var cx = n * step + step / 2; n ? x.lineTo(cx, Y(e)) : x.moveTo(cx, Y(e)); }); x.stroke(); x.globalAlpha = 1;
+    var first = candles[0].i;
+    marks.forEach(function (m) {
+      var n = m.i - first - 1; if (n < 0 || n >= candles.length) return;
+      var cx = n * step + step / 2, cy = Y(m.p);
+      x.beginPath(); x.arc(cx, cy, 4, 0, 6.283);
+      x.fillStyle = css('--bg'); x.fill();
+      x.strokeStyle = m.kind === 'open' ? css('--fills') : css('--risk'); x.lineWidth = 2; x.stroke();
+    });
+    // last price tag
+    var ly = Y(price); x.setLineDash([3, 4]); x.strokeStyle = css('--muted'); x.lineWidth = 1; x.beginPath(); x.moveTo(0, ly); x.lineTo(cw, ly); x.stroke(); x.setLineDash([]);
+    x.fillStyle = css('--fg'); x.fillRect(cw + 2, ly - 9, padR - 4, 18); x.fillStyle = css('--bg'); x.textAlign = 'left'; x.fillText(fmt(price), cw + 6, ly);
+    // time labels
+    x.fillStyle = css('--muted'); x.textAlign = 'center';
+    for (var t = 0; t < 6; t++) { var d = new Date(Date.now() - (5 - t) * 11 * 1000 * 60); x.fillText(d.toISOString().slice(11, 16), (t / 5) * (cw - 30) + 15, H - 8); }
+    // agent graph overlay
+    var gw = Math.min(cw * .42, 380), gh = ch * .62, gx = cw * .08, gy = 10;
+    var P = nodePos.map(function (q) { return [gx + q[0] * gw, gy + q[1] * gh]; });
+    var cols = ['--chief', '--scan', '--vet', '--size', '--fills', '--risk'];
+    var order = ['chief', 'scan', 'vet', 'size', 'fills', 'risk'];
+    x.lineWidth = 1;
+    for (var n = 1; n < P.length; n++) {
+      var on = order[n - 1] === active;
+      x.strokeStyle = css(cols[n - 1]); x.globalAlpha = on ? .9 : .22;
+      x.beginPath(); x.moveTo(P[0][0], P[0][1]); x.lineTo(P[n][0], P[n][1]); x.stroke();
+      if (on) { var u = (tm / 500) % 1; x.globalAlpha = 1; x.fillStyle = css(cols[n - 1]); x.beginPath(); x.arc(P[n][0] + (P[0][0] - P[n][0]) * u, P[n][1] + (P[0][1] - P[n][1]) * u, 3, 0, 6.283); x.fill(); }
+    }
+    for (var m = 0; m < P.length; m++) {
+      var isOn = m > 0 && order[m - 1] === active, r = m === 0 ? 7 : (isOn ? 6 : 4);
+      x.globalAlpha = m === 0 || isOn ? 1 : .55; x.fillStyle = css(m === 0 ? '--fg' : cols[m - 1]);
+      x.beginPath(); x.arc(P[m][0], P[m][1], r, 0, 6.283); x.fill();
+    }
+    x.globalAlpha = 1;
+    $('cPx').textContent = fmt(price); $('hBtc').textContent = fmt(price);
+    var k = candles[candles.length - 1];
+    $('legend').textContent = 'EMA 12 ' + fmt(ema) + ' · O ' + fmt(k.o) + ' H ' + fmt(k.h) + ' L ' + fmt(k.l) + ' C ' + fmt(k.c) + ' · FILLS ' + fills + ' · POSITION ' + (pos ? pos.side : 'FLAT');
+  }
+  function drawBal() {
+    var f = fit($('bal')), x = f.x, W = f.w, H = f.h; x.clearRect(0, 0, W, H);
+    var lo = Math.min.apply(null, balHist), hi = Math.max.apply(null, balHist), pad = (hi - lo) * .15 || 1; lo -= pad; hi += pad;
+    var X = function (n) { return 40 + n / (balHist.length - 1) * (W - 56); }, Y = function (v) { return 8 + (hi - v) / (hi - lo) * (H - 20); };
+    x.font = '10px ' + css('--mono'); x.fillStyle = css('--muted'); x.textBaseline = 'middle';
+    [lo, (lo + hi) / 2, hi].forEach(function (v) { x.fillText('$' + fmt(v / 1000, 1) + 'k', 0, Y(v)); });
+    var g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(61,220,151,.28)'); g.addColorStop(1, 'rgba(61,220,151,0)');
+    x.beginPath(); balHist.forEach(function (v, n) { n ? x.lineTo(X(n), Y(v)) : x.moveTo(X(n), Y(v)); });
+    x.lineTo(X(balHist.length - 1), H); x.lineTo(X(0), H); x.closePath(); x.fillStyle = g; x.fill();
+    x.beginPath(); balHist.forEach(function (v, n) { n ? x.lineTo(X(n), Y(v)) : x.moveTo(X(n), Y(v)); });
+    x.strokeStyle = css('--up'); x.lineWidth = 2; x.stroke();
+    var e = balHist.length - 1; x.fillStyle = css('--up'); x.beginPath(); x.arc(X(e), Y(balHist[e]), 4, 0, 6.283); x.fill();
+  }
+  function paintNumbers() {
+    $('bAmt').textContent = usd(bank); $('hBank').textContent = usd(bank);
+    $('bSub').textContent = 'P&L ' + (pnlSum >= 0 ? '+' : '-') + usd(Math.abs(pnlSum)) + ' · fees ' + usd(fees) + ' · from $' + fmt(START);
+    var tot = wins + losses; $('wr').textContent = wins + 'W · ' + losses + 'L · WINRATE ' + (tot ? (wins / tot * 100).toFixed(1) : '0') + '%';
+    $('fund').textContent = '+' + (0.002 + rnd(-.0004, .0004)).toFixed(4) + '%';
+  }
+
+  /* ---------- loop ---------- */
+  function tick() { pushCandle(); step(); paintNumbers(); }
+  function frame(tm) {
+    $('clock').textContent = new Date().toISOString().slice(11, 16) + ' UTC';
+    drawChart(tm); drawBal(); requestAnimationFrame(frame);
+  }
+  AG.forEach(function (a, i) { setAgent(a.id, '-', '', 0, 'idle'); });
+  setAgent('chief', 'FLAT', '', .3, 'waiting for scan'); refreshMetrics();
+  setInterval(tick, 1100); tick(); requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
