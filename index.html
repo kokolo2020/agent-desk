@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v1.10">
+<meta name="version" content="v1.11">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -127,7 +127,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.10</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.11</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
       <p>6 agents per coin · live prices · paper trades only</p>
     </div>
     <div class="pills">
@@ -171,7 +171,7 @@ td.r, th.r { text-align: right; }
   ];
   var MET_KEYS = ['book_depth_usd', 'spread_bps', 'funding_rate', 'open_interest', 'turnover_24h', 'change_24h'];
   /* v0.9 ledger: every closed paper trade is saved to Supabase (anon key, insert-only by row rules). */
-  var RUN = 'v1.10', MMONLY = /[?&]mm=only/.test(location.search), SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
+  var RUN = 'v1.11', MMONLY = /[?&]mm=only/.test(location.search), SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
   var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXFxdnBsb3Nud3F1YWtzc2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTAzMTUsImV4cCI6MjA5ODYyNjMxNX0.FPcGOaZqdAXje_BI1a8BKYQrMi5uS2zm0Oy3hopZdho';
   var SESSION = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   var ledgerOk = 0, ledgerErr = 0, ledgerMsg = '';
@@ -227,6 +227,7 @@ td.r, th.r { text-align: right; }
       '<div class="panel"><h2>Activity tape <small class="num" data-r="tapeMeta">0 fills · flat</small></h2><div class="scroll"><table><thead><tr><th>TIME</th><th>SIDE</th><th class="r">SIZE</th><th class="r">PRICE</th><th class="r">NOTIONAL</th><th class="r">P&amp;L</th></tr></thead><tbody data-r="tape"></tbody></table></div></div>' +
       '<div class="panel"><h2>Fade bot <small>copies your manual pattern · buys dips, shorts bounces in a range</small></h2><div class="num" data-r="fade" style="font-size:12px;line-height:1.7"></div></div>' +
       '<div class="panel"><h2>Spread quoter <small>rests a bid and an ask at the touch · does earning the spread beat fees?</small></h2><div class="num" data-r="mm" style="font-size:12px;line-height:1.7"></div></div>' +
+      '<div class="panel"><h2>Jev stand-in <small>same quoter, but only opens on the side the book signal picks</small></h2><div class="num" data-r="jv" style="font-size:12px;line-height:1.7"></div></div>' +
       '<div class="panel"><h2>Manual order <small>paper · own $150 bank · maker 0.02% limit / taker 0.055% market</small></h2>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;color:var(--muted)">' +
       '<label>Type<select data-r="mType" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><option value="market">Market</option><option value="limit">Limit</option></select></label>' +
@@ -280,15 +281,21 @@ td.r, th.r { text-align: right; }
       var k = candles[candles.length - 1];
       if (k) { k.c = price; k.h = Math.max(k.h, price); k.l = Math.min(k.l, price); }
     }
+    function bookImb(bids, asks) {
+      var bd = 0, ad = 0, i;
+      for (i = 0; i < 10 && i < bids.length; i++) bd += +bids[i][0] * +bids[i][1];
+      for (i = 0; i < 10 && i < asks.length; i++) ad += +asks[i][0] * +asks[i][1];
+      return bd + ad > 0 ? (bd - ad) / (bd + ad) : 0;
+    }
     function setBook(bids, asks) {
       var bid = +bids[0][0], ask = +asks[0][0], mid = (bid + ask) / 2, d = 0;
       bids.forEach(function (x) { if (+x[0] >= mid * 0.99) d += x[0] * x[1]; });
       asks.forEach(function (x) { if (+x[0] <= mid * 1.01) d += x[0] * x[1]; });
-      live.ob = { spread: (ask - bid) / mid * 1e4, depth: d }; live.bb = bid; live.ba = ask; mmQuote();
+      live.ob = { spread: (ask - bid) / mid * 1e4, depth: d }; live.bb = bid; live.ba = ask; live.imb = bookImb(bids, asks); QS.forEach(qQuote);
     }
     function onPrice(p) {
       if (!p || !candles.length) return;
-      price = p; lastTick = Date.now(); tickN++; mmTrade(p);
+      price = p; lastTick = Date.now(); tickN++; qTrade(p);
       var k = candles[candles.length - 1];
       if (lastTick >= k.i + 60000) {
         candles.push({ i: Math.floor(lastTick / 60000) * 60000, o: k.c, h: Math.max(k.c, p), l: Math.min(k.c, p), c: p, v: 0 });
@@ -380,7 +387,7 @@ td.r, th.r { text-align: right; }
         return s.book().catch(function () {});
       }).catch(function (e) {
         live.ok = false; live.err = s.name + ' ' + ((e && e.message) || 'blocked');
-        cur = (cur + 1) % SRC.length; live.ob = null; live.bb = live.ba = 0; mm.bq = mm.aq = null;
+        cur = (cur + 1) % SRC.length; live.ob = null; live.bb = live.ba = 0; QS.forEach(function (m) { m.bq = m.aq = null; });
         if ((tries || 0) < SRC.length - 1) poll((tries || 0) + 1);
       });
     }
@@ -618,59 +625,76 @@ td.r, th.r { text-align: right; }
         '<br>30m range ' + (fb.range * 100).toFixed(2) + '% · vs 20m average ' + (fb.dev * 100 >= 0 ? '+' : '') + (fb.dev * 100).toFixed(2) + '%' +
         '<br>stayed out (seconds): range ' + fb.tally.range + ' · trend ' + fb.tally.trend + ' · stretch ' + fb.tally.stretch + ' · turn ' + fb.tally.turn + ' · pause ' + fb.tally.pause;
     }
-    /* v1.10 spread quoter (paper). Rests a bid at the best bid and an ask at the best ask, never crosses the spread, and keeps
-       score under three fee levels (standard maker 0.02%, zero, small rebate) so we can see whether earning the spread beats fees.
-       Fill rule is strict: our bid fills only when a trade prints BELOW it (our ask: ABOVE it), no credit for queue position.
-       Quotes refresh from each book snapshot (every 3 s), and a filled side stays empty until the next snapshot (latency).
-       Inventory cap $225 per side; a 0.4% adverse move flattens at the touch as taker. Fills are logged as mm_fill, one mm_snap a minute. */
-    var MM = { qUsd: 75, capUsd: 225, stopPct: 0.004, tiers: { std: 0.0002, zero: 0, rebate: -0.00005 } };
-    var mm = { cash: 0, inv: 0, avg: 0, bq: null, aq: null, nb: 0, ns: 0, nflat: 0, volMaker: 0, volTaker: 0, takerFees: 0, spSum: 0, spN: 0, snapAt: 0, why: 'waiting for the book' };
-    function mmMid() { return live.bb && live.ba ? (live.bb + live.ba) / 2 : price; }
-    function mmQuote() {
+    /* v1.10 quoters (paper). Each one rests post-only orders at the best bid / best ask, never crosses the spread, and keeps score under
+       three fee levels (standard maker 0.02%, zero, small rebate). Fill rule is strict: a bid fills only when a trade prints BELOW it
+       (an ask: ABOVE it), no credit for queue position. Quotes refresh from each book snapshot (3 s); a filled side stays empty until
+       the next one. Inventory cap $225; a 0.4% adverse move flattens at the touch as taker.
+       "mm" quotes both sides. "jev" is our stand-in for the Jev model: it only OPENS on the side its signal picks (book imbalance
+       plus short-term flow), while the side that reduces inventory is always quoted. Fills log as <tag>_fill, a snapshot with the
+       signal features goes out each minute, so we can later train a real classifier on our own data. */
+    var QC = { qUsd: 75, capUsd: 225, stopPct: 0.004, tiers: { std: 0.0002, zero: 0, rebate: -0.00005 } };
+    var flowRing = [];
+    function flowBp() { var now = Date.now(), old = null, i; for (i = 0; i < flowRing.length; i++) { if (now - flowRing[i][0] <= 10000) { old = flowRing[i]; break; } } return old && price ? (price - old[1]) / old[1] * 1e4 : 0; }
+    function jevPick() {
+      var imb = live.imb || 0, fl = flowBp();
+      if (imb >= 0.25 && fl >= -1) return 'BUY';
+      if (imb <= -0.25 && fl <= 1) return 'SELL';
+      return 'OFF';
+    }
+    function newQuoter(tag, pick) { return { tag: tag, pick: pick, cash: 0, inv: 0, avg: 0, bq: null, aq: null, nb: 0, ns: 0, nflat: 0, volMaker: 0, volTaker: 0, takerFees: 0, spSum: 0, spN: 0, snapAt: 0, side: 'BOTH', why: 'waiting for the book' }; }
+    var mm = newQuoter('mm', function () { return 'BOTH'; }), jv = newQuoter('jev', jevPick), QS = [mm, jv];
+    function qMid() { return live.bb && live.ba ? (live.bb + live.ba) / 2 : price; }
+    function qQuote(m) {
       var b = live.bb, a = live.ba; if (!(b > 0 && a > b)) return;
-      var mid = (a + b) / 2, qty = MM.qUsd / mid, invUsd = mm.inv * mid;
-      mm.spSum += (a - b) / mid * 1e4; mm.spN++;
-      mm.bq = invUsd < MM.capUsd ? { px: b, qty: qty } : null;
-      mm.aq = invUsd > -MM.capUsd ? { px: a, qty: qty } : null;
-      mm.why = 'quoting ' + P(b) + ' / ' + P(a) + ' · spread ' + ((a - b) / mid * 1e4).toFixed(2) + ' bp' + (!mm.bq ? ' · long cap, bid off' : '') + (!mm.aq ? ' · short cap, ask off' : '');
+      var mid = (a + b) / 2, qty = QC.qUsd / mid, invUsd = m.inv * mid, side = m.pick(); m.side = side;
+      m.spSum += (a - b) / mid * 1e4; m.spN++;
+      var wantB = side === 'BOTH' || side === 'BUY' || m.inv < 0, wantA = side === 'BOTH' || side === 'SELL' || m.inv > 0;
+      m.bq = wantB && invUsd + QC.qUsd <= QC.capUsd ? { px: b, qty: qty } : null;
+      m.aq = wantA && invUsd - QC.qUsd >= -QC.capUsd ? { px: a, qty: qty } : null;
+      m.why = (m.tag === 'jev' ? 'signal ' + side + ' (book ' + ((live.imb || 0) * 100).toFixed(0) + '%, flow ' + flowBp().toFixed(1) + ' bp) · ' : '') + 'quoting ' + (m.bq ? P(b) : 'no bid') + ' / ' + (m.aq ? P(a) : 'no ask') + ' · spread ' + ((a - b) / mid * 1e4).toFixed(2) + ' bp';
     }
-    function mmFill(side, qd) {
-      var n = qd.qty * qd.px, d = side === 'BUY' ? 1 : -1, ni = mm.inv + d * qd.qty;
-      if (mm.inv === 0 || (mm.inv > 0) === (d > 0)) mm.avg = (Math.abs(mm.inv) * mm.avg + qd.qty * qd.px) / Math.abs(ni);
-      else if ((ni > 0) !== (mm.inv > 0) && Math.abs(ni) > 1e-12) mm.avg = qd.px;
-      mm.inv = Math.abs(ni) < 1e-12 ? 0 : ni; mm.cash -= d * n; mm.volMaker += n;
-      if (d > 0) { mm.nb++; mm.bq = null; } else { mm.ns++; mm.aq = null; }
-      logEvent('mm_fill', c.key, side, qd.px, { qty: qd.qty, inv: mm.inv, spread_bp: live.bb && live.ba ? +(((live.ba - live.bb) / mmMid()) * 1e4).toFixed(2) : null });
+    function qFill(m, side, qd) {
+      var n = qd.qty * qd.px, d = side === 'BUY' ? 1 : -1, ni = m.inv + d * qd.qty;
+      if (m.inv === 0 || (m.inv > 0) === (d > 0)) m.avg = (Math.abs(m.inv) * m.avg + qd.qty * qd.px) / Math.abs(ni);
+      else if ((ni > 0) !== (m.inv > 0) && Math.abs(ni) > 1e-12) m.avg = qd.px;
+      m.inv = Math.abs(ni) < 1e-12 ? 0 : ni; m.cash -= d * n; m.volMaker += n;
+      if (d > 0) { m.nb++; m.bq = null; } else { m.ns++; m.aq = null; }
+      logEvent(m.tag + '_fill', c.key, side, qd.px, { qty: qd.qty, inv: m.inv, spread_bp: live.bb && live.ba ? +(((live.ba - live.bb) / qMid()) * 1e4).toFixed(2) : null, imb: +(live.imb || 0).toFixed(3), flow_bp: +flowBp().toFixed(2) });
     }
-    function mmTrade(p) {
-      if (mm.bq && p < mm.bq.px) mmFill('BUY', mm.bq);
-      if (mm.aq && p > mm.aq.px) mmFill('SELL', mm.aq);
+    function qTrade(p) {
+      flowRing.push([Date.now(), p]); while (flowRing.length > 400 || (flowRing.length && Date.now() - flowRing[0][0] > 15000)) flowRing.shift();
+      QS.forEach(function (m) {
+        if (m.bq && p < m.bq.px) qFill(m, 'BUY', m.bq);
+        if (m.aq && p > m.aq.px) qFill(m, 'SELL', m.aq);
+      });
     }
-    function mmEquity() { return mm.cash + mm.inv * mmMid(); }
-    function mmNet(rate) { return mmEquity() - rate * mm.volMaker - mm.takerFees; }
-    function mmTick() {
+    function qEquity(m) { return m.cash + m.inv * qMid(); }
+    function qNet(m, rate) { return qEquity(m) - rate * m.volMaker - m.takerFees; }
+    function qTick(m) {
       if (!(live.bb > 0)) return;
-      var mid = mmMid();
-      if (mm.inv !== 0 && mm.avg > 0) {
-        var adv = (mm.inv > 0 ? 1 : -1) * (mid - mm.avg) / mm.avg;
-        if (adv <= -MM.stopPct) {
-          var xp = mm.inv > 0 ? live.bb : live.ba, n = Math.abs(mm.inv) * xp;
-          mm.cash += mm.inv * xp; mm.volTaker += n; mm.takerFees += n * FEE; mm.nflat++;
-          logEvent('mm_flatten', c.key, mm.inv > 0 ? 'SELL' : 'BUY', xp, { inv: mm.inv, adverse_pct: +(adv * 100).toFixed(3) });
-          mm.inv = 0; mm.avg = 0;
+      var mid = qMid();
+      if (m.inv !== 0 && m.avg > 0) {
+        var adv = (m.inv > 0 ? 1 : -1) * (mid - m.avg) / m.avg;
+        if (adv <= -QC.stopPct) {
+          var xp = m.inv > 0 ? live.bb : live.ba, n = Math.abs(m.inv) * xp;
+          m.cash += m.inv * xp; m.volTaker += n; m.takerFees += n * FEE; m.nflat++;
+          logEvent(m.tag + '_flatten', c.key, m.inv > 0 ? 'SELL' : 'BUY', xp, { inv: m.inv, adverse_pct: +(adv * 100).toFixed(3) });
+          m.inv = 0; m.avg = 0;
         }
       }
-      if (Date.now() - mm.snapAt >= 60000) {
-        mm.snapAt = Date.now();
-        logEvent('mm_snap', c.key, null, mid, { equity: +mmEquity().toFixed(4), net_std: +mmNet(MM.tiers.std).toFixed(4), net_zero: +mmNet(MM.tiers.zero).toFixed(4), net_rebate: +mmNet(MM.tiers.rebate).toFixed(4), fills: mm.nb + mm.ns, inv: mm.inv, vol: +mm.volMaker.toFixed(2), flat: mm.nflat, avg_spread_bp: mm.spN ? +(mm.spSum / mm.spN).toFixed(2) : null });
+      if (Date.now() - m.snapAt >= 60000) {
+        m.snapAt = Date.now();
+        logEvent(m.tag + '_snap', c.key, null, mid, { equity: +qEquity(m).toFixed(4), net_std: +qNet(m, QC.tiers.std).toFixed(4), net_zero: +qNet(m, QC.tiers.zero).toFixed(4), net_rebate: +qNet(m, QC.tiers.rebate).toFixed(4), fills: m.nb + m.ns, inv: m.inv, vol: +m.volMaker.toFixed(2), flat: m.nflat, avg_spread_bp: m.spN ? +(m.spSum / m.spN).toFixed(2) : null, imb: +(live.imb || 0).toFixed(3), flow_bp: +flowBp().toFixed(2), side: m.side });
       }
     }
-    function paintMM() {
-      var sg = function (v) { return (v >= 0 ? '+' : '-') + usd(Math.abs(v)); }, f = mm.nb + mm.ns, mid = mmMid();
-      q('mm').innerHTML = 'now: ' + mm.why + '<br>' + f + ' fills (' + mm.nb + ' buys, ' + mm.ns + ' sells) · flattened ' + mm.nflat + ' · inventory ' + usd(mm.inv * mid) +
-        '<br>spread capture before fees ' + sg(mmEquity()) + ' · traded ' + usd(mm.volMaker) + ' · avg spread ' + (mm.spN ? (mm.spSum / mm.spN).toFixed(2) : '-') + ' bp' +
-        '<br>net at maker 0.02%: <b>' + sg(mmNet(MM.tiers.std)) + '</b> · at 0% fee: ' + sg(mmNet(MM.tiers.zero)) + ' · with 0.005% rebate: ' + sg(mmNet(MM.tiers.rebate));
+    function paintQ(m, id) {
+      var sg = function (v) { return (v >= 0 ? '+' : '-') + usd(Math.abs(v)); }, f = m.nb + m.ns, mid = qMid();
+      q(id).innerHTML = 'now: ' + m.why + '<br>' + f + ' fills (' + m.nb + ' buys, ' + m.ns + ' sells) · flattened ' + m.nflat + ' · inventory ' + usd(m.inv * mid) +
+        '<br>spread capture before fees ' + sg(qEquity(m)) + ' · traded ' + usd(m.volMaker) + ' · avg spread ' + (m.spN ? (m.spSum / m.spN).toFixed(2) : '-') + ' bp' +
+        '<br>net at maker 0.02%: <b>' + sg(qNet(m, QC.tiers.std)) + '</b> · at 0% fee: ' + sg(qNet(m, QC.tiers.zero)) + ' · with 0.005% rebate: ' + sg(qNet(m, QC.tiers.rebate));
     }
+    function quotersTick() { QS.forEach(qTick); }
+    function paintMM() { paintQ(mm, 'mm'); paintQ(jv, 'jv'); }
 
     /* pipeline: one step per second */
     var tradeHist = [];
@@ -855,7 +879,7 @@ td.r, th.r { text-align: right; }
     setAgent('chief', 'FLAT', '', .3, 'waiting for the first scan');
     q('bSub').textContent = 'P&L +$0.00 · fees $0.00 · from ' + usd(START);
     poll(0); setInterval(function () { poll(0); }, 3000);
-    return { tick: function () { if (!MMONLY) { step(); twinStep(); manualStep(); fadeStep(); } mmTick(); paint(); paintTwin(); paintManual(); paintFade(); paintMM(); }, twin: function () { return tw; }, draw: function (tm) { drawChart(tm); drawBal(); }, bank: function () { return bank; } };
+    return { tick: function () { if (!MMONLY) { step(); twinStep(); manualStep(); fadeStep(); } quotersTick(); paint(); paintTwin(); paintManual(); paintFade(); paintMM(); }, twin: function () { return tw; }, draw: function (tm) { drawChart(tm); drawBal(); }, bank: function () { return bank; } };
   }
 
   var desks = CFGS.map(makeDesk);

@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.11
+- "Jev stand-in" panel. We don't have the Jev model, so this is our version of the idea: the same paper spread quoter, but it only opens a position on the side a signal picks. Signal = order-book imbalance over the top 10 levels (buy side if the bid side is 25%+ heavier and price isn't falling, sell side for the reverse, otherwise stay out). The side that reduces inventory is always quoted. It runs beside the plain two-sided quoter so the two can be compared.
+- Both quoters now log the signal (book imbalance, 10-second flow) with every fill and every minute (`mm_*` and `jev_*` events in `desk_events`), so we can later train a real buy/sell classifier on our own data.
+- Inventory cap now counts the next quote, so it no longer overshoots $225.
+
 ## v1.10
 - New "Spread quoter" panel on each desk (paper only). It rests a bid at the best bid and an ask at the best ask, never crosses the spread, and shows spread capture before fees plus the net result at three fee levels: standard maker 0.02%, 0%, and a 0.005% rebate. This tests whether market-making (the Jev idea) beats fees.
 - Fill rule is strict: a bid fills only when a trade prints below it (an ask: above it), with no credit for queue position. Quotes refresh from each book snapshot (now every 3 seconds, was every 9), and a filled side stays empty until the next snapshot.
