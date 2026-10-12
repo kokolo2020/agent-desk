@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v0.5">
+<meta name="version" content="v0.6">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -128,12 +128,12 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header>
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v0.5</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v0.6</small></h1>
       <p>6 agents · live BTC price · paper trades only</p>
     </div>
     <div class="pills">
       <span class="pill feed" id="feed">CONNECTING…</span>
-      <span class="pill">BANK <b class="num" id="hBank">$2,000.00</b></span>
+      <span class="pill">BANK <b class="num" id="hBank">$150.00</b></span>
       <span class="pill">BTC <b class="num" id="hBtc">…</b></span>
       <span class="pill clock num" id="clock">00:00 UTC</span>
     </div>
@@ -161,8 +161,8 @@ td.r, th.r { text-align: right; }
     </div>
     <div class="big">
       <div class="wr num" id="wr">0W · 0L · WINRATE 0%</div>
-      <div class="amt num" id="bAmt">$2,000.00</div>
-      <div class="sub num" id="bSub">P&amp;L +$0.00 · fees $0.00 · from $2,000.00</div>
+      <div class="amt num" id="bAmt">$150.00</div>
+      <div class="sub num" id="bSub">P&amp;L +$0.00 · fees $0.00 · from $150.00</div>
     </div>
   </section>
 
@@ -222,13 +222,13 @@ td.r, th.r { text-align: right; }
   function activate(id) { AG.forEach(function (a) { a.el.classList.toggle('on', a.id === id); }); active = id; }
 
   /* ---------- state ---------- */
-  var START = 2000, bank = START, pnlSum = 0, fees = 0, wins = 0, losses = 0, fills = 0;
+  var START = 150, bank = START, pnlSum = 0, fees = 0, wins = 0, losses = 0, fills = 0;
   var price = 0, candles = [], emaArr = [], marks = [], balHist = [START, START], pos = null;
   var live = { ok: false, t: null, ob: null, last: 0, src: '', err: '' };
   var FEE = 0.00055, LEV = 5, TP = 0.0015, SL = 0.001, MAXHOLD = 90000;
 
   /* ---------- live data: Bybit first, Binance and OKX as backup ---------- */
-  var VERSION = 'v0.5';
+  var VERSION = 'v0.6';
   function jfetch(url) {
     return fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
   }

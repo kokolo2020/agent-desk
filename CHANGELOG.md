@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v0.6
+- Paper bank is now $150.
+
 ## v0.5
 - Price stream tries several exchange WebSocket addresses and switches if one sends nothing for 6 seconds.
 - Book depth is measured on the top of the order book only, so the threshold is now $5M and the metric is renamed book_depth_usd.
