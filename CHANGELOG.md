@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.0
+- LLM Chief. When the formula wants a trade, the desk asks a Claude model (through an n8n webhook) and only enters if Claude agrees. Claude sees the price, 6-minute move, spread, depth, funding, recent closes and the last 5 closed trades.
+- Claude's reason shows on the desk and is saved in the ledger `reason` column (`| llm: ...`).
+- If the LLM Chief is offline the desk stays flat (no trade) and says so.
+
 ## v0.9
 - Every closed paper trade is now saved to a Supabase table (`paper_trades`) with run version, session, coin, side, entry/exit, size, fees, P&L and reason. Trades survive reloads, so versions can be compared fairly.
 - Header shows `ledger: N saved` (turns red with the error if a save fails).
