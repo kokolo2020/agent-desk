@@ -3,7 +3,7 @@
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
 ## v1.0
-- LLM Chief. When the formula wants a trade, the desk asks a Claude model (through an n8n webhook) and only enters if Claude agrees. Claude sees the price, 6-minute move, spread, depth, funding, recent closes and the last 5 closed trades.
+- LLM Chief. When the formula wants a trade, the desk asks a Claude model (through a small Netlify function that holds the API key) and only enters if Claude agrees. Claude sees the price, 6-minute move, spread, depth, funding, recent closes and the last 5 closed trades.
 - Claude's reason shows on the desk and is saved in the ledger `reason` column (`| llm: ...`).
 - If the LLM Chief is offline the desk stays flat (no trade) and says so.
 

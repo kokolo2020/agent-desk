@@ -193,11 +193,11 @@ td.r, th.r { text-align: right; }
     } catch (e) { ledgerErr++; ledgerMsg = 'error'; ledgerPaint(); }
   }
   setTimeout(ledgerPaint, 500);
-  /* v1.0 LLM Chief: when the formula wants a trade, a Claude model (via n8n) must agree before the desk enters. */
-  var CHIEF_URL = 'https://moneynow.app.n8n.cloud/webhook/agent-desk-chief', CHIEF_KEY = 'f8a277cced855dd7dc30c45d';
+  /* v1.0 LLM Chief: when the formula wants a trade, a Claude model must agree before the desk enters. */
+  var CHIEF_URL = '/.netlify/functions/chief';
   function askChief(payload) {
     var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 20000);
-    return fetch(CHIEF_URL, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json', 'x-desk-key': CHIEF_KEY }, body: JSON.stringify(payload) })
+    return fetch(CHIEF_URL, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       .then(function (r) { clearTimeout(to); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (j) { if (!j || !j.action) throw new Error('empty reply'); return j; });
   }
