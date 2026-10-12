@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.2
+- Manual order panel on each coin: place paper LONG or SHORT yourself, market or limit, with your own TP % and SL %, and size of 100%, 50% or 25% of the bank at 5x.
+- Own $150 bank per coin, separate from the agent desk and the limit twin, so the comparison stays clean. Saved to Supabase with run `v1.2-manual`.
+- Market fills at the last price (taker 0.055%). A limit rests until price trades through it by 0.01% (maker 0.02%); a limit already past the market fills at once as taker. TP exits as maker, SL and the close button as taker. No time limit; cancel or close any time.
+
 ## v1.1
 - Limit-order twin on each coin. When the market desk enters (after the LLM Chief agrees), the twin rests a limit order at the near side of the book (long at the bid, short at the ask) instead of paying the spread.
 - Fills only if price trades through the limit by 0.01%. If not filled within 3 minutes it counts as missed.

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v1.1">
+<meta name="version" content="v1.2">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -127,7 +127,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.1</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.2</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
       <p>6 agents per coin · live prices · paper trades only</p>
     </div>
     <div class="pills">
@@ -138,7 +138,7 @@ td.r, th.r { text-align: right; }
 
   <div class="desks" id="desks"></div>
 
-  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
+  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. v1.2: a Manual order panel on each coin lets you place paper market or limit orders yourself, with your own TP and SL (own $150 bank, not part of the agent comparison). The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
 </div>
 
 <script>
@@ -171,7 +171,7 @@ td.r, th.r { text-align: right; }
   ];
   var MET_KEYS = ['book_depth_usd', 'spread_bps', 'funding_rate', 'open_interest', 'turnover_24h', 'change_24h'];
   /* v0.9 ledger: every closed paper trade is saved to Supabase (anon key, insert-only by row rules). */
-  var RUN = 'v1.1', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
+  var RUN = 'v1.2', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
   var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXFxdnBsb3Nud3F1YWtzc2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTAzMTUsImV4cCI6MjA5ODYyNjMxNX0.FPcGOaZqdAXje_BI1a8BKYQrMi5uS2zm0Oy3hopZdho';
   var SESSION = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   var ledgerOk = 0, ledgerErr = 0, ledgerMsg = '';
@@ -215,6 +215,15 @@ td.r, th.r { text-align: right; }
       '<div class="panel balance"><div><div class="label">Paper balance · live</div><canvas class="bal" data-r="bal" aria-label="' + c.key + ' paper balance"></canvas></div>' +
       '<div class="big"><div class="wr num" data-r="wr">0W · 0L · WINRATE 0%</div><div class="amt num" data-r="bAmt">$150.00</div><div class="sub num" data-r="bSub"></div></div></div>' +
       '<div class="panel"><h2>Activity tape <small class="num" data-r="tapeMeta">0 fills · flat</small></h2><div class="scroll"><table><thead><tr><th>TIME</th><th>SIDE</th><th class="r">SIZE</th><th class="r">PRICE</th><th class="r">NOTIONAL</th><th class="r">P&amp;L</th></tr></thead><tbody data-r="tape"></tbody></table></div></div>' +
+      '<div class="panel"><h2>Manual order <small>paper · own $150 bank · maker 0.02% limit / taker 0.055% market</small></h2>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px;color:var(--muted)">' +
+      '<label>Type<select data-r="mType" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><option value="market">Market</option><option value="limit">Limit</option></select></label>' +
+      '<label>Limit price<input data-r="mPx" type="number" step="any" inputmode="decimal" placeholder="price" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"></label>' +
+      '<label>Size<select data-r="mSize" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><option value="1">100% (5x)</option><option value="0.5">50%</option><option value="0.25">25%</option></select></label>' +
+      '<label>TP % / SL %<span style="display:flex;gap:6px"><input data-r="mTp" type="number" step="0.05" inputmode="decimal" value="0.4" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"><input data-r="mSl" type="number" step="0.05" inputmode="decimal" value="0.2" style="background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;width:100%;min-height:36px;box-sizing:border-box"></span></label></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px">' +
+      '<button data-r="mLong" style="border:1px solid var(--line);border-radius:10px;padding:11px 6px;font:700 13px var(--mono);min-height:44px;cursor:pointer;color:#fff;background:var(--up)">LONG</button><button data-r="mShort" style="border:1px solid var(--line);border-radius:10px;padding:11px 6px;font:700 13px var(--mono);min-height:44px;cursor:pointer;color:#fff;background:var(--down)">SHORT</button><button data-r="mCancel" style="border:1px solid var(--line);border-radius:10px;padding:11px 6px;font:700 13px var(--mono);min-height:44px;cursor:pointer;color:#fff;background:#555">CANCEL / CLOSE</button></div>' +
+      '<div class="num" data-r="mStat" style="font-size:12px;line-height:1.7;margin-top:10px">flat</div></div>' +
       '<div class="panel"><h2>Limit twin <small>same signals · maker fee 0.02% · waits 3 min for a fill</small></h2><div class="num" data-r="twin" style="font-size:12px;line-height:1.7"></div></div>' +
       '<div class="panel"><h2>Verdict <small>thresholds</small></h2><div data-r="metrics"></div><div class="verdict idle" data-r="verdict"><span data-r="vText">WAITING</span><small data-r="vSub">scan → vet → chief</small></div></div>';
     $('desks').appendChild(root);
@@ -431,6 +440,68 @@ td.r, th.r { text-align: right; }
         'limit minus market: ' + sg(tw.pnl - m);
     }
 
+    /* v1.2 manual order: you place paper orders yourself. Own $150 bank, same fees as the twin.
+       Market = fills at last price (taker). Limit = rests until price trades through it by 0.01% (maker); a limit
+       already past the market fills at once as taker. TP exits as maker, SL and manual close as taker. No time limit. */
+    var mn = { bank: START, pnl: 0, fees: 0, w: 0, l: 0, order: null, pos: null, msg: '' };
+    function manualFill(side, entry, notional, tp, sl, inFee) {
+      mn.pos = { side: side, entry: entry, size: notional / entry, notional: notional, tp: tp, sl: sl, inFee: inFee, t0: Date.now() };
+      mn.order = null;
+    }
+    function manualOpen(side, type, lim, tp, sl, frac) {
+      if (mn.order || mn.pos) return 'already have an order or position';
+      if (!price) return 'no price yet';
+      if (!(tp > 0) || !(sl > 0)) return 'set TP and SL above 0';
+      var notional = mn.bank * LEV * frac;
+      if (type === 'limit') {
+        if (!(lim > 0)) return 'enter a limit price';
+        var marketable = side === 'LONG' ? lim >= price : lim <= price;
+        if (!marketable) { mn.order = { side: side, lim: lim, notional: notional, tp: tp, sl: sl, t0: Date.now() }; return side + ' limit resting @ ' + P(lim); }
+      }
+      manualFill(side, price, notional, tp, sl, FEE);
+      return side + ' filled @ ' + P(price) + (type === 'limit' ? ' (limit was past market, filled as taker)' : '');
+    }
+    function manualExit(xp, why, outFee) {
+      var p = mn.pos, dir = p.side === 'LONG' ? 1 : -1, mv = dir * (xp - p.entry) / p.entry;
+      var fee = p.notional * (p.inFee + outFee), pnl = p.notional * mv - fee;
+      mn.fees += fee; mn.pnl += pnl; mn.bank += pnl; if (pnl >= 0) mn.w++; else mn.l++;
+      saveTrade({ run: RUN + '-manual', session: SESSION, coin: c.key, side: p.side, entry_price: p.entry, exit_price: xp, size: p.size, notional: p.notional, fees: fee, pnl: pnl, reason: 'manual: ' + why, opened_at: new Date(p.t0).toISOString(), closed_at: new Date().toISOString() });
+      mn.msg = 'closed ' + why + ' ' + (pnl >= 0 ? '+' : '-') + usd(Math.abs(pnl)); mn.pos = null;
+    }
+    function manualCancel() {
+      if (mn.order) { mn.order = null; mn.msg = 'order cancelled'; }
+      else if (mn.pos) manualExit(price, 'manual close', FEE);
+    }
+    function manualStep() {
+      if (!price) return;
+      if (mn.order) {
+        var o = mn.order, hit = o.side === 'LONG' ? price <= o.lim * 0.9999 : price >= o.lim * 1.0001;
+        if (hit) { manualFill(o.side, o.lim, o.notional, o.tp, o.sl, MAKER); mn.msg = o.side + ' limit filled @ ' + P(o.lim); }
+      } else if (mn.pos) {
+        var p = mn.pos, dir = p.side === 'LONG' ? 1 : -1, mv = dir * (price - p.entry) / p.entry;
+        if (mv >= p.tp) manualExit(p.entry * (1 + dir * p.tp), 'take profit (maker)', MAKER);
+        else if (mv <= -p.sl) manualExit(price, 'stop (taker)', FEE);
+      }
+    }
+    function paintManual() {
+      var sg = function (v) { return (v >= 0 ? '+' : '-') + usd(Math.abs(v)); }, st;
+      if (mn.order) st = mn.order.side + ' limit resting @ ' + P(mn.order.lim) + ' · price ' + P(price);
+      else if (mn.pos) { var p = mn.pos, d = p.side === 'LONG' ? 1 : -1, u = p.notional * d * (price - p.entry) / p.entry; st = p.side + ' @ ' + P(p.entry) + ' · TP +' + (p.tp * 100).toFixed(2) + '% SL -' + (p.sl * 100).toFixed(2) + '% · unrealized ' + sg(u); }
+      else st = 'flat';
+      var busy = !!(mn.order || mn.pos);
+      q('mLong').disabled = q('mShort').disabled = busy; q('mCancel').disabled = !busy;
+      q('mLong').style.opacity = q('mShort').style.opacity = busy ? 0.4 : 1; q('mCancel').style.opacity = busy ? 1 : 0.4;
+      q('mStat').innerHTML = st + '<br>' + mn.w + 'W ' + mn.l + 'L · bank ' + usd(mn.bank) + ' · P&amp;L ' + sg(mn.pnl) + ' · fees ' + usd(mn.fees) + (mn.msg ? '<br>' + mn.msg : '');
+    }
+    function manualGo(side) {
+      mn.msg = manualOpen(side, q('mType').value, +q('mPx').value, +q('mTp').value / 100, +q('mSl').value / 100, +q('mSize').value);
+      paintManual();
+    }
+    q('mLong').onclick = function () { manualGo('LONG'); };
+    q('mShort').onclick = function () { manualGo('SHORT'); };
+    q('mCancel').onclick = function () { manualCancel(); paintManual(); };
+    q('mType').onchange = function () { if (q('mType').value === 'limit' && !q('mPx').value && price) q('mPx').value = price; };
+
     /* pipeline: one step per second */
     var tradeHist = [];
     var phase = 0, wait = 2 + Math.floor(Math.random() * 3), cyc = {};
@@ -610,7 +681,7 @@ td.r, th.r { text-align: right; }
     setAgent('chief', 'FLAT', '', .3, 'waiting for the first scan');
     q('bSub').textContent = 'P&L +$0.00 · fees $0.00 · from ' + usd(START);
     poll(0); setInterval(function () { poll(0); }, 3000);
-    return { tick: function () { step(); twinStep(); paint(); paintTwin(); }, twin: function () { return tw; }, draw: function (tm) { drawChart(tm); drawBal(); }, bank: function () { return bank; } };
+    return { tick: function () { step(); twinStep(); manualStep(); paint(); paintTwin(); paintManual(); }, twin: function () { return tw; }, draw: function (tm) { drawChart(tm); drawBal(); }, bank: function () { return bank; } };
   }
 
   var desks = CFGS.map(makeDesk);
