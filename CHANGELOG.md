@@ -2,6 +2,13 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.9
+- Tuned from the overnight run (42 trades, -$26.65; the judge's 30 early exits lost $31.10, the plain rules made +$4.47).
+- The judge can now only cut a LOSING trade: it is asked only once the trade is down 0.3% and held 30s+, and a CLOSE acts only at down 0.4% or worse. Winners are left to the take profit.
+- Trend filter: no entry when the 30-minute net move (measured up to 5 minutes ago, so the dip itself does not count) is over 40% of the range, or the 60-minute move is 1% or more.
+- Circuit breaker: 3 losses in a row pauses the bot for 30 minutes (`fade_pause` event).
+- Gate logging: once a minute the reason for staying out is logged as `fade_gate`, and the panel shows seconds spent out per gate (range, trend, stretch, turn, pause).
+
 ## v1.8
 - Fade bot now has an "instinct" layer. Every 20 seconds while a trade is open, a new Netlify function (`exit-judge`, Claude Haiku) is shown the position (entry, price, P&L, peak, worst, time held, last 12 one-minute closes, range, distance from average) and answers HOLD or CLOSE.
 - A CLOSE exits at market (taker fee). The hard rules stay as guardrails: take profit 0.5%, stop 0.8%, exit after 6 minutes. If the function is down, the bot just follows the rules.
