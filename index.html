@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<meta name="version" content="v0.3">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -127,7 +128,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header>
     <div class="brand">
-      <h1>AGENT DESK</h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v0.3</small></h1>
       <p>6 agents · live BTC price · paper trades only</p>
     </div>
     <div class="pills">
@@ -142,7 +143,7 @@ td.r, th.r { text-align: right; }
 
   <section class="panel">
     <div class="chart-head">
-      <div class="sym"><span class="coin">B</span><div><b>BTC / USDT</b><small>PERP · BYBIT · 5x PAPER</small></div><span class="px num" id="cPx">…</span></div>
+      <div class="sym"><span class="coin">B</span><div><b>BTC / USDT</b><small>PERP · LIVE · 5x PAPER</small></div><span class="px num" id="cPx">…</span></div>
       <span class="stat">24H <b class="num" id="s24">…</b></span>
       <span class="stat">24H VOL <b class="num" id="sVol">…</b></span>
       <span class="stat">OPEN INT <b class="num" id="sOi">…</b></span>
@@ -182,7 +183,7 @@ td.r, th.r { text-align: right; }
     </div>
   </section>
 
-  <p class="foot">Prices, volume, open interest, funding and order book come live from the Bybit public API (BTCUSDT perpetual). Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.15%, stop −0.10%, or exit after 90 seconds. Not financial advice.</p>
+  <p class="foot">Prices, volume, open interest, funding and order book come live from a public exchange API (Bybit, with Binance and OKX as backup, BTCUSDT perpetual). Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.15%, stop −0.10%, or exit after 90 seconds. Not financial advice.</p>
 </div>
 
 <script>
@@ -223,46 +224,70 @@ td.r, th.r { text-align: right; }
   /* ---------- state ---------- */
   var START = 2000, bank = START, pnlSum = 0, fees = 0, wins = 0, losses = 0, fills = 0;
   var price = 0, candles = [], emaArr = [], marks = [], balHist = [START, START], pos = null;
-  var live = { ok: false, t: null, ob: null, last: 0 };
+  var live = { ok: false, t: null, ob: null, last: 0, src: '', err: '' };
   var FEE = 0.00055, LEV = 5, TP = 0.0015, SL = 0.001, MAXHOLD = 90000;
 
-  /* ---------- live data (Bybit public API) ---------- */
-  var API = 'https://api.bybit.com/v5/market/';
-  function jget(path) {
-    return fetch(API + path, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
-      .then(function (j) { if (j.retCode !== 0) throw new Error('api ' + j.retCode); return j.result; });
+  /* ---------- live data: Bybit first, Binance and OKX as backup ---------- */
+  var VERSION = 'v0.3';
+  function jfetch(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
   }
   function rebuildEma() {
     emaArr = []; var e = candles[0].c;
     candles.forEach(function (k) { e = e + (k.c - e) * (2 / 13); emaArr.push(e); });
   }
-  function pullKlines() {
-    return jget('kline?category=linear&symbol=BTCUSDT&interval=1&limit=70').then(function (r) {
-      candles = r.list.slice().reverse().map(function (a) { return { i: +a[0], o: +a[1], h: +a[2], l: +a[3], c: +a[4], v: +a[5] }; });
-      rebuildEma();
-    });
+  function setCandles(rows) { candles = rows; rebuildEma(); }
+  function setTicker(t) {
+    live.t = t; price = +t.lastPrice;
+    var k = candles[candles.length - 1];
+    if (k) { k.c = price; k.h = Math.max(k.h, price); k.l = Math.min(k.l, price); }
   }
-  function pullTicker() {
-    return jget('tickers?category=linear&symbol=BTCUSDT').then(function (r) {
-      var t = r.list[0]; live.t = t; price = +t.lastPrice;
-      var k = candles[candles.length - 1];
-      if (k) { k.c = price; k.h = Math.max(k.h, price); k.l = Math.min(k.l, price); }
-    });
+  function setBook(bids, asks) {
+    var bid = +bids[0][0], ask = +asks[0][0], mid = (bid + ask) / 2, d = 0;
+    bids.forEach(function (x) { if (+x[0] >= mid * 0.99) d += x[0] * x[1]; });
+    asks.forEach(function (x) { if (+x[0] <= mid * 1.01) d += x[0] * x[1]; });
+    live.ob = { spread: (ask - bid) / mid * 1e4, depth: d };
   }
-  function pullBook() {
-    return jget('orderbook?category=linear&symbol=BTCUSDT&limit=200').then(function (r) {
-      var bid = +r.b[0][0], ask = +r.a[0][0], mid = (bid + ask) / 2, d = 0;
-      r.b.forEach(function (x) { if (+x[0] >= mid * 0.99) d += x[0] * x[1]; });
-      r.a.forEach(function (x) { if (+x[0] <= mid * 1.01) d += x[0] * x[1]; });
-      live.ob = { spread: (ask - bid) / mid * 1e4, depth: d };
+  var SRC = [
+    { name: 'BYBIT',
+      klines: function () { return jfetch('https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=1&limit=70').then(function (j) {
+        if (j.retCode !== 0) throw new Error('api ' + j.retCode);
+        setCandles(j.result.list.slice().reverse().map(function (a) { return { i: +a[0], o: +a[1], h: +a[2], l: +a[3], c: +a[4], v: +a[5] }; })); }); },
+      ticker: function () { return jfetch('https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT').then(function (j) {
+        if (j.retCode !== 0) throw new Error('api ' + j.retCode); setTicker(j.result.list[0]); }); },
+      book: function () { return jfetch('https://api.bybit.com/v5/market/orderbook?category=linear&symbol=BTCUSDT&limit=200').then(function (j) { setBook(j.result.b, j.result.a); }); } },
+    { name: 'BINANCE',
+      klines: function () { return jfetch('https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=70').then(function (rows) {
+        setCandles(rows.map(function (a) { return { i: +a[0], o: +a[1], h: +a[2], l: +a[3], c: +a[4], v: +a[5] }; })); }); },
+      ticker: function () { return Promise.all([
+        jfetch('https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT'),
+        jfetch('https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT'),
+        jfetch('https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT')
+      ]).then(function (r) { setTicker({ lastPrice: r[0].lastPrice, price24hPcnt: +r[0].priceChangePercent / 100, turnover24h: r[0].quoteVolume, fundingRate: r[1].lastFundingRate, openInterestValue: +r[2].openInterest * +r[0].lastPrice }); }); },
+      book: function () { return jfetch('https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=500').then(function (j) { setBook(j.bids, j.asks); }); } },
+    { name: 'OKX',
+      klines: function () { return jfetch('https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1m&limit=70').then(function (j) {
+        setCandles(j.data.slice().reverse().map(function (a) { return { i: +a[0], o: +a[1], h: +a[2], l: +a[3], c: +a[4], v: +a[5] }; })); }); },
+      ticker: function () { return Promise.all([
+        jfetch('https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT-SWAP'),
+        jfetch('https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP'),
+        jfetch('https://www.okx.com/api/v5/public/open-interest?instType=SWAP&instId=BTC-USDT-SWAP')
+      ]).then(function (r) { var d = r[0].data[0];
+        setTicker({ lastPrice: d.last, price24hPcnt: (+d.last - +d.open24h) / +d.open24h, turnover24h: +d.volCcy24h * +d.last, fundingRate: r[1].data[0].fundingRate, openInterestValue: +r[2].data[0].oiUsd }); }); },
+      book: function () { return jfetch('https://www.okx.com/api/v5/market/books?instId=BTC-USDT-SWAP&sz=400').then(function (j) {
+        var c = function (x) { return [x[0], x[1] * 0.01]; }; setBook(j.data[0].bids.map(c), j.data[0].asks.map(c)); }); } }
+  ];
+  var cur = 0, bookN = 0;
+  function poll(tries) {
+    var s = SRC[cur];
+    Promise.all([s.klines(), s.ticker()]).then(function () {
+      live.ok = true; live.src = s.name; live.last = Date.now(); live.err = '';
+      if (!live.ob || bookN++ % 3 === 0) return s.book().catch(function () {});
+    }).catch(function (e) {
+      live.ok = false; live.err = s.name + ' ' + ((e && e.message) || 'blocked');
+      cur = (cur + 1) % SRC.length; live.ob = null;
+      if ((tries || 0) < SRC.length - 1) poll((tries || 0) + 1);
     });
-  }
-  var bookN = 0;
-  function poll() {
-    Promise.all([pullKlines(), pullTicker()]).then(function () {
-      live.ok = true; live.last = Date.now();
-      if (!live.ob || bookN++ % 3 === 0) return pullBook().catch(function () {});
-    }).catch(function () { live.ok = false; });
   }
 
   /* ---------- thresholds panel (real numbers) ---------- */
@@ -448,8 +473,8 @@ td.r, th.r { text-align: right; }
     var tot = wins + losses; $('wr').textContent = wins + 'W · ' + losses + 'L · WINRATE ' + (tot ? (wins / tot * 100).toFixed(1) : '0') + '%';
     $('tapeMeta').textContent = fills + ' fills · ' + (pos ? pos.side.toLowerCase() : 'flat') + ' · P&L ' + (pnlSum >= 0 ? '+' : '-') + usd(Math.abs(pnlSum));
     var fd = $('feed'), age = Math.round((Date.now() - live.last) / 1000);
-    if (live.ok) { fd.className = 'pill feed ok'; fd.textContent = 'LIVE · BYBIT · ' + age + 's'; }
-    else { fd.className = 'pill feed bad'; fd.textContent = live.last ? 'FEED DOWN · RETRYING' : 'CONNECTING…'; }
+    if (live.ok) { fd.className = 'pill feed ok'; fd.textContent = 'LIVE · ' + live.src + ' · ' + age + 's'; }
+    else { fd.className = 'pill feed bad'; fd.textContent = live.err ? 'FEED DOWN · ' + live.err : 'CONNECTING…'; }
     if (live.t) {
       var t = live.t;
       $('hBtc').textContent = fmt(price); $('cPx').textContent = fmt(price);
@@ -468,7 +493,7 @@ td.r, th.r { text-align: right; }
   }
   AG.forEach(function (a) { setAgent(a.id, '-', '', 0, 'idle'); });
   setAgent('chief', 'FLAT', '', .3, 'waiting for the first scan');
-  poll(); setInterval(poll, 3000);
+  poll(0); setInterval(function () { poll(0); }, 3000);
   setInterval(tick, 1000); requestAnimationFrame(frame);
 })();
 </script>
