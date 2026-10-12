@@ -8,7 +8,7 @@ export default async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405);
   const origin = req.headers.get('origin') || req.headers.get('referer') || '';
   if (!/desk-agent\.netlify\.app|localhost/.test(origin)) return json({ error: 'origin' }, 403);
-  const key = process.env.ANTHROPIC_API_KEY;
+  const key = (process.env.ANTHROPIC_API_KEY || '').trim().replace(/^["']|["']$/g, '');
   if (!key) return json({ error: 'ANTHROPIC_API_KEY not set' }, 500);
   const now = Date.now();
   while (hits.length && now - hits[0] > 60000) hits.shift();
@@ -24,7 +24,7 @@ export default async (req) => {
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model: 'claude-haiku-5-5', max_tokens: 1500, system: SYSTEM, messages: [{ role: 'user', content: prompt }] })
     });
-    if (!r.ok) return json({ error: 'anthropic ' + r.status }, 502);
+    if (!r.ok) return json({ error: 'anthropic ' + r.status, key_len: key.length, key_prefix_ok: key.startsWith('sk-ant-') }, 502);
     const j = await r.json();
     const text = (j.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
     const s = text.indexOf('{'), e = text.lastIndexOf('}');
