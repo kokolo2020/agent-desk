@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.5
+- Manual order: new UPDATE TP / SL button. Change the TP and SL boxes, then tap it to move them on a resting limit order or an open position. A blank box keeps the current value.
+- The TP and SL boxes now fill in with the position's levels when an order is placed or filled.
+- Checks: TP must be beyond the current price and SL on the other side of it, so a stop can be moved up (long) or down (short) to lock in profit. Each change is logged as `manual_adjust` in `desk_events`.
+
 ## v1.4
 - New table `desk_events` (SQL in `sql/events.sql`). Every step around a trade is now logged: formula signals, Claude's verdict (action, confidence, reason, whether it agreed), market entries, limit-twin orders, fills and misses, manual orders, fills and cancels. Closed trades still go to `paper_trades`.
 - Logging is silent: if the table is missing, the page keeps working and only the ledger counter in the header ignores it.
