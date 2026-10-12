@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v0.7">
+<meta name="version" content="v0.8">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -127,7 +127,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v0.7</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v0.8</small></h1>
       <p>6 agents per coin · live prices · paper trades only</p>
     </div>
     <div class="pills">
@@ -138,7 +138,7 @@ td.r, th.r { text-align: right; }
 
   <div class="desks" id="desks"></div>
 
-  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.15%, stop −0.10%, or exit after 90 seconds. Not financial advice.</p>
+  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes, and it only enters on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
 </div>
 
 <script>
@@ -153,12 +153,12 @@ td.r, th.r { text-align: right; }
     return fetch(url, opt || { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
   }
 
-  /* One config per coin. Thresholds for NEAR are first guesses, tune after watching it. */
+  /* One config per coin. Thresholds for NEAR are first guesses, tune after watching it. v0.8: far fewer trades, wider targets. */
   var CFGS = [
     { key: 'BTC', label: 'BTC / USDT', letter: 'B', color: '#f7931a', bybit: 'BTCUSDT', binance: 'BTCUSDT', binWs: 'btcusdt', okx: 'BTC-USDT-SWAP', okxCt: 0.01, ku: 'XBTUSDTM', kuMult: 0.001,
-      dec: 2, sizeDec: 4, gate: 0.0003, momScale: 600, minDepth: 5e6, depthMax: 1e8, maxSpread: 3, minTurn: 1e9, turnMax: 5e10, oiMax: 4e10 },
+      dec: 2, sizeDec: 4, gate: 0.0015, momScale: 200, minDepth: 5e6, depthMax: 1e8, maxSpread: 3, minTurn: 1e9, turnMax: 5e10, oiMax: 4e10 },
     { key: 'NEAR', label: 'NEAR / USDT', letter: 'N', color: '#00c08b', bybit: 'NEARUSDT', binance: 'NEARUSDT', binWs: 'nearusdt', okx: 'NEAR-USDT-SWAP', okxCt: 10, ku: 'NEARUSDTM', kuMult: 1,
-      dec: 3, sizeDec: 1, gate: 0.0006, momScale: 300, minDepth: 5e5, depthMax: 5e6, maxSpread: 8, minTurn: 5e7, turnMax: 1e9, oiMax: 1e9 }
+      dec: 3, sizeDec: 1, gate: 0.003, momScale: 100, minDepth: 5e5, depthMax: 5e6, maxSpread: 8, minTurn: 5e7, turnMax: 1e9, oiMax: 1e9 }
   ];
 
   var AG = [
@@ -170,7 +170,7 @@ td.r, th.r { text-align: right; }
     { id: 'risk', name: 'RISK', role: 'closing', tag: 'MATH', c: '--risk' }
   ];
   var MET_KEYS = ['book_depth_usd', 'spread_bps', 'funding_rate', 'open_interest', 'turnover_24h', 'change_24h'];
-  var START = 150, FEE = 0.00055, LEV = 5, TP = 0.0015, SL = 0.001, MAXHOLD = 90000;
+  var START = 150, FEE = 0.00055, LEV = 5, TP = 0.004, SL = 0.002, MAXHOLD = 900000, COOLDOWN = 600;
   var nodePos = [[.5, .5], [.12, .22], [.3, .1], [.7, .1], [.88, .24], [.68, .42], [.28, .4]];
 
   function makeDesk(c) {
@@ -409,7 +409,7 @@ td.r, th.r { text-align: right; }
         activate('risk');
         var dir = pos.side === 'LONG' ? 1 : -1, mv = dir * (price - pos.entry) / pos.entry;
         var why = mv >= TP ? 'take profit hit' : mv <= -SL ? 'stop hit' : (Date.now() - pos.t0 >= MAXHOLD ? 'time exit' : null);
-        setAgent('risk', (mv >= 0 ? '+' : '') + fmt(mv * 100, 3) + '%', 'open', 0.5 + mv * 150, 'holding ' + Math.round((Date.now() - pos.t0) / 1000) + 's · TP +' + (TP * 100).toFixed(2) + '% · SL −' + (SL * 100).toFixed(2) + '%');
+        setAgent('risk', (mv >= 0 ? '+' : '') + fmt(mv * 100, 3) + '%', 'open', 0.5 + mv * 60, 'holding ' + Math.round((Date.now() - pos.t0) / 1000) + 's · TP +' + (TP * 100).toFixed(2) + '% · SL −' + (SL * 100).toFixed(2) + '%');
         if (!why) return;
         var fee = pos.notional * FEE * 2, pnl = pos.notional * mv - fee;
         fees += fee; pnlSum += pnl; bank += pnl; if (pnl >= 0) wins++; else losses++;
@@ -417,7 +417,7 @@ td.r, th.r { text-align: right; }
         addRow({ time: hhmmss(), kind: 'CLOSE', size: pos.size, price: price, notional: pos.notional, pnl: pnl });
         setAgent('risk', wins + 'W ' + losses + 'L', 'closed', wins / Math.max(1, wins + losses), why + ' · ' + (pnl >= 0 ? '+' : '-') + usd(Math.abs(pnl)) + ' after fees');
         pos = null; balHist.push(bank); if (balHist.length > 90) balHist.shift();
-        phase = 0; wait = 8; return;
+        phase = 0; wait = COOLDOWN; return;
       }
     }
 

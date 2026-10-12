@@ -2,6 +2,12 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v0.8
+- Result of v0.7 after 52 minutes: about 76 trades, gross P&L +$8, fees $57, net -$49 on $300. Fees dominated.
+- Far fewer trades: 10-minute cooldown after each trade, and entry only on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR).
+- Wider targets: take profit +0.40%, stop -0.20%, max hold 15 minutes. A fee of 0.11% is now a smaller share of each trade.
+- Momentum score scale lowered so it no longer saturates at 0.95.
+
 ## v0.7
 - BTC and NEAR now run side by side. Each coin has its own desk: six agents, live chart, $150 paper balance, activity tape and verdict. The header shows the total of both balances.
 - NEAR thresholds are first guesses: momentum gate 0.06%, depth minimum $0.5M, max spread 8 bps.
