@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<meta name="version" content="v1.7">
+<meta name="version" content="v1.8">
 <title>Agent Desk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -127,7 +127,7 @@ td.r, th.r { text-align: right; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.7</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
+      <h1>AGENT DESK <small style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0">v1.8</small> <small id="hLedger" style="font:500 11px var(--mono);color:var(--muted);letter-spacing:0;margin-left:8px">ledger: starting</small></h1>
       <p>6 agents per coin · live prices · paper trades only</p>
     </div>
     <div class="pills">
@@ -138,7 +138,7 @@ td.r, th.r { text-align: right; }
 
   <div class="desks" id="desks"></div>
 
-  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. v1.7: a Fade bot on each coin copies the manual range pattern (buy dips, short bounces) on its own $150 bank. v1.6: manual TP and SL reset to blank after every close or cancel, and a blank box means 3% from entry. v1.5: TP and SL of a manual order or open position can be changed with UPDATE TP / SL. v1.4: signals, Claude's verdicts, orders, fills, misses and cancels are logged to Supabase (desk_events). v1.3: manual order TP and SL are now prices. v1.2: a Manual order panel on each coin lets you place paper market or limit orders yourself, with your own TP and SL (own $150 bank, not part of the agent comparison). The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
+  <p class="foot">Prices, volume, open interest, funding and order book come live from public exchange APIs (Bybit first, then Binance, OKX and KuCoin as backup, USDT perpetuals). Each desk has its own $150 paper bank. Trades are paper only: filled at the last price, 5x of the bank, 0.055% taker fee per side, take profit +0.40%, stop −0.20%, or exit after 15 minutes. After each trade the desk waits 10 minutes. v1.0: when the formula wants a trade, a Claude model must agree first (it sees the market snapshot and recent trades). v1.1: each coin also runs a limit-order twin on the same signals (maker fee 0.02%, rests at the near side of the book for up to 3 minutes, may miss the fill) so market and limit results can be compared. v1.8: the fade bot also asks Claude every 20 seconds whether to close early (exit judge). v1.7: a Fade bot on each coin copies the manual range pattern (buy dips, short bounces) on its own $150 bank. v1.6: manual TP and SL reset to blank after every close or cancel, and a blank box means 3% from entry. v1.5: TP and SL of a manual order or open position can be changed with UPDATE TP / SL. v1.4: signals, Claude's verdicts, orders, fills, misses and cancels are logged to Supabase (desk_events). v1.3: manual order TP and SL are now prices. v1.2: a Manual order panel on each coin lets you place paper market or limit orders yourself, with your own TP and SL (own $150 bank, not part of the agent comparison). The formula only proposes on on a 6-minute move of at least 0.15% (BTC) or 0.30% (NEAR). Not financial advice.</p>
 </div>
 
 <script>
@@ -171,7 +171,7 @@ td.r, th.r { text-align: right; }
   ];
   var MET_KEYS = ['book_depth_usd', 'spread_bps', 'funding_rate', 'open_interest', 'turnover_24h', 'change_24h'];
   /* v0.9 ledger: every closed paper trade is saved to Supabase (anon key, insert-only by row rules). */
-  var RUN = 'v1.7', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
+  var RUN = 'v1.8', SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
   var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXFxdnBsb3Nud3F1YWtzc2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTAzMTUsImV4cCI6MjA5ODYyNjMxNX0.FPcGOaZqdAXje_BI1a8BKYQrMi5uS2zm0Oy3hopZdho';
   var SESSION = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   var ledgerOk = 0, ledgerErr = 0, ledgerMsg = '';
@@ -544,6 +544,19 @@ td.r, th.r { text-align: right; }
        Entry is market (taker 0.055%), take profit is a limit (maker 0.02%), stop and time exit are taker. */
     var FADE = { rmin: 0.008, dev: 0.0025, tp: 0.005, sl: 0.008, hold: 360000, cool: 60000 };
     var fb = { bank: START, pnl: 0, fees: 0, w: 0, l: 0, pos: null, nextAt: 0, why: 'warming up', dev: 0, range: 0 };
+    var EXIT_URL = '/.netlify/functions/exit-judge';
+    function askExit(payload) {
+      var ctl = new AbortController(), to = setTimeout(function () { ctl.abort(); }, 15000);
+      return fetch(EXIT_URL, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        .then(function (r) { clearTimeout(to); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (j) { if (!j || !j.action) throw new Error('empty'); return j; });
+    }
+    function fadeClose(why, xp, mvf, outFee) {
+      var p = fb.pos, fee = p.notional * (FEE + outFee), pnl = p.notional * mvf - fee;
+      fb.fees += fee; fb.pnl += pnl; fb.bank += pnl; if (pnl >= 0) fb.w++; else fb.l++;
+      saveTrade({ run: RUN + '-fade', session: SESSION, coin: c.key, side: p.side, entry_price: p.entry, exit_price: xp, size: p.size, notional: p.notional, fees: fee, pnl: pnl, reason: 'fade: ' + why, opened_at: new Date(p.t0).toISOString(), closed_at: new Date().toISOString() });
+      fb.pos = null; fb.judge = ''; fb.nextAt = Date.now() + FADE.cool; fb.why = 'closed ' + why + ' ' + (pnl >= 0 ? '+' : '-') + usd(Math.abs(pnl));
+    }
     function fadeStep() {
       var n = candles.length;
       if (!price || n < 30) { fb.why = 'warming up'; return; }
@@ -554,14 +567,23 @@ td.r, th.r { text-align: right; }
       fb.dev = dev; fb.range = range;
       if (fb.pos) {
         var p = fb.pos, d = p.side === 'LONG' ? 1 : -1, mv = d * (price - p.entry) / p.entry, why = null, xp = price, mvf = mv, outFee = FEE;
+        p.peak = Math.max(p.peak || 0, mv); p.trough = Math.min(p.trough || 0, mv);
         if (mv >= FADE.tp) { why = 'take profit (maker)'; xp = p.entry * (1 + d * FADE.tp); mvf = FADE.tp; outFee = MAKER; }
         else if (mv <= -FADE.sl) why = 'stop (taker)';
         else if (Date.now() - p.t0 >= FADE.hold) why = 'time exit (taker)';
-        if (!why) { fb.why = p.side + ' open ' + (mv >= 0 ? '+' : '') + (mv * 100).toFixed(2) + '% · ' + Math.round((Date.now() - p.t0) / 1000) + 's'; return; }
-        var fee = p.notional * (FEE + outFee), pnl = p.notional * mvf - fee;
-        fb.fees += fee; fb.pnl += pnl; fb.bank += pnl; if (pnl >= 0) fb.w++; else fb.l++;
-        saveTrade({ run: RUN + '-fade', session: SESSION, coin: c.key, side: p.side, entry_price: p.entry, exit_price: xp, size: p.size, notional: p.notional, fees: fee, pnl: pnl, reason: 'fade: ' + why, opened_at: new Date(p.t0).toISOString(), closed_at: new Date().toISOString() });
-        fb.pos = null; fb.nextAt = Date.now() + FADE.cool; fb.why = 'closed ' + why + ' ' + (pnl >= 0 ? '+' : '-') + usd(Math.abs(pnl));
+        if (why) { fadeClose(why, xp, mvf, outFee); return; }
+        fb.why = p.side + ' open ' + (mv >= 0 ? '+' : '') + (mv * 100).toFixed(2) + '% · ' + Math.round((Date.now() - p.t0) / 1000) + 's' + (fb.judge ? ' · judge: ' + fb.judge : '');
+        /* instinct layer: every 20 seconds Claude may close the trade early */
+        if (!fb.asking && Date.now() - p.t0 >= 20000 && Date.now() - (fb.askAt || 0) >= 20000) {
+          fb.asking = true; fb.askAt = Date.now();
+          var held = Math.round((Date.now() - p.t0) / 1000), pos0 = p;
+          askExit({ coin: c.key, position: { side: p.side, entry: p.entry, price: price, pnl_pct: +(mv * 100).toFixed(3), peak_pct: +(p.peak * 100).toFixed(3), worst_pct: +(p.trough * 100).toFixed(3), held_s: held, closes_1m: candles.slice(-12).map(function (k) { return k.c; }), range30_pct: +(range * 100).toFixed(2), dev_from_avg_pct: +(dev * 100).toFixed(3) } })
+            .then(function (j) {
+              fb.asking = false; fb.judge = j.action + ': ' + (j.reason || '');
+              logEvent('fade_judge', c.key, pos0.side, price, { action: j.action, reason: j.reason, pnl_pct: +(((pos0.side === 'LONG' ? 1 : -1) * (price - pos0.entry) / pos0.entry) * 100).toFixed(3), held_s: held });
+              if (j.action === 'CLOSE' && fb.pos === pos0) { var d2 = pos0.side === 'LONG' ? 1 : -1; fadeClose('judge exit (taker): ' + (j.reason || ''), price, d2 * (price - pos0.entry) / pos0.entry, FEE); }
+            }).catch(function () { fb.asking = false; });
+        }
         return;
       }
       if (Date.now() < fb.nextAt) { fb.why = 'cooldown'; return; }

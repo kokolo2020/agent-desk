@@ -2,6 +2,11 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.8
+- Fade bot now has an "instinct" layer. Every 20 seconds while a trade is open, a new Netlify function (`exit-judge`, Claude Haiku) is shown the position (entry, price, P&L, peak, worst, time held, last 12 one-minute closes, range, distance from average) and answers HOLD or CLOSE.
+- A CLOSE exits at market (taker fee). The hard rules stay as guardrails: take profit 0.5%, stop 0.8%, exit after 6 minutes. If the function is down, the bot just follows the rules.
+- Every judgement is logged as `fade_judge` in `desk_events` (action, reason, P&L, time held), so we can later check whether the judge's early exits beat simply holding.
+
 ## v1.7
 - Fade bot on each coin, copying the manual range pattern (7 wins, 1 loss on NEAR). Own $150 bank, compounding, runs on its own with no clicks.
 - Rules: only in a range wide enough to beat fees (30-minute high to low of at least 0.8%); price at least 0.25% away from its 20-minute average; buy the dip or short the bounce only once price has turned (no catching a falling knife). Take profit 0.5% (maker), stop 0.8%, exit after 6 minutes, 60-second cooldown.
