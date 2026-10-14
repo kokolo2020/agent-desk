@@ -274,11 +274,17 @@
   function load() {
     Promise.all([get('ap_positions', 'select=*&order=opened_at.desc&limit=1000'), get('ap_decisions', 'select=*&order=ts.desc&limit=40'), get('ap_news', 'select=*&order=ts.desc&limit=9'), get('ap_samples', 'select=coin,price,ret_60m,change24h,ts&order=ts.desc&limit=60')]).then(function (r) {
       build(r); paint();
-      $('status').textContent = 'updated ' + bk(Date.now()).toISOString().slice(11, 19) + ' Bangkok time · refreshes every 30s · ' + D.rows.length + ' coins tracked';
+      $('status').innerHTML = 'updated ' + bk(Date.now()).toISOString().slice(11, 19) + ' Bangkok time · refreshes every 5 min (next in <b id="next"></b>) · <span class="chip" id="refreshNow">refresh now</span> · ' + D.rows.length + ' coins tracked';
     }).catch(function (e) { $('status').innerHTML = '<span class="err">could not load: ' + esc(e.message) + '</span>'; });
   }
   $('fOpen').onclick = function () { allOpen = !allOpen; openDec = {}; if (D) decisions(); }; $('fAll').onclick = function () { onlyTrades = false; if (D) decisions(); }; $('fTrade').onclick = function () { onlyTrades = true; if (D) decisions(); };
-  load(); setInterval(load, 30000); eqLoad(); setInterval(eqLoad, 120000);
+  /* refresh every 5 minutes, lined up with the server scan (which runs on the 5-minute marks) plus 40 seconds for it to finish */
+  var nextAt = 0;
+  function schedule() { var now = Date.now(); nextAt = Math.ceil((now - 40000) / 300000) * 300000 + 40000; if (nextAt - now < 20000) nextAt += 300000; }
+  function refreshAll() { schedule(); load(); eqLoad(); }
+  setInterval(function () { var left = Math.max(0, Math.round((nextAt - Date.now()) / 1000)), el = $('next'); if (el) el.textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2); if (left === 0) refreshAll(); }, 1000);
+  schedule(); load(); eqLoad();
+  document.addEventListener('click', function (e) { if (e.target && e.target.id === 'refreshNow') refreshAll(); });
 })();
 </script>
 </body>

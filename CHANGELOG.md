@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.13.1
+- Autopilot page refreshes every 5 minutes, lined up with the server scan, with a countdown and a refresh-now button.
+
 ## v1.13
 - Autopilot now covers the top 20 coins (BTC, ETH, XRP, BNB, SOL, DOGE, TRX, ADA, LINK, AVAX, SUI, XLM, BCH, HBAR, LTC, TON, DOT, UNI, AAVE, NEAR). Contract sizes come from OKX at run time, and a coin OKX does not list is dropped.
 - Every 5 minutes it scans all of them (one snapshot row each for pattern mining), then asks Claude only about the 4 coins whose move is biggest compared with their own noise, plus any coin with an open trade. At most 5 AI trades open at once; skips a coin when the spread is over 8 bps.
