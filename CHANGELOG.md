@@ -2,6 +2,10 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.14
+- Autopilot now covers the top 50 coins by market cap (OKX swaps; the list has spares so 50 stay live). Every coin gets $250 on the Algo desk and the AI desk. Claude still only looks at the 4 biggest movers per scan, so AI cost stays flat.
+- Forward-return backfill runs in parallel so the 5 minute run stays fast with 50 coins.
+
 ## v1.13.1
 - Autopilot page refreshes every 5 minutes, lined up with the server scan, with a countdown and a refresh-now button.
 

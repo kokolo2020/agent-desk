@@ -2,7 +2,9 @@
 export const SB_URL = 'https://seiqqvplosnwquaksshm.supabase.co';
 export const START = 250, FEE = 0.00055, LEV = 5, COOLDOWN_MIN = 10, MODEL = 'claude-haiku-5-5';
 // v1.13: top-20 universe (OKX USDT perpetuals). Contract sizes are read from OKX at run time; coins OKX does not list are dropped.
-export const TOP = ['BTC', 'ETH', 'XRP', 'BNB', 'SOL', 'DOGE', 'TRX', 'ADA', 'LINK', 'AVAX', 'SUI', 'XLM', 'BCH', 'HBAR', 'LTC', 'TON', 'DOT', 'UNI', 'AAVE', 'NEAR'];
+export const TOP_N = 50;
+// market-cap order; extras at the end are spares, so 50 stay live if OKX lacks a few
+export const TOP = ['BTC', 'ETH', 'XRP', 'BNB', 'SOL', 'DOGE', 'TRX', 'ADA', 'LINK', 'AVAX', 'SUI', 'XLM', 'BCH', 'HBAR', 'LTC', 'TON', 'DOT', 'UNI', 'AAVE', 'NEAR', 'SHIB', 'PEPE', 'ETC', 'APT', 'ARB', 'OP', 'ATOM', 'FIL', 'ICP', 'INJ', 'TAO', 'ONDO', 'POL', 'CRO', 'ALGO', 'VET', 'TIA', 'SEI', 'RENDER', 'WLD', 'FET', 'ENA', 'JUP', 'PENDLE', 'LDO', 'STX', 'IMX', 'GRT', 'CRV', 'MKR', 'XMR', 'ZEC', 'TRUMP', 'BONK', 'WIF', 'FLOKI'];
 export const COINS = {};
 for (const s of TOP) COINS[s] = { name: s, inst: s + '-USDT-SWAP', ct: 1 };
 COINS.BTC.name = 'Bitcoin'; COINS.ETH.name = 'Ethereum'; COINS.NEAR.name = 'NEAR Protocol';
@@ -18,6 +20,8 @@ async function loadInstruments() {
     if (!i || i.state !== 'live') { delete COINS[s]; continue; }
     COINS[s].ct = +i.ctVal * (+i.ctMult || 1) || 1;
   }
+  const keep = TOP.filter((x) => COINS[x]).slice(0, TOP_N);
+  for (const x of Object.keys(COINS)) if (!keep.includes(x)) delete COINS[x];
   instAt = Date.now();
 }
 
@@ -274,9 +278,9 @@ export async function scanAll(env) {
   const decs = await db.select('ap_decisions', 'select=id,ts,price,coin&outcome_price=is.null&ts=lt.' + iso(15 * 60000) + '&ts=gt.' + iso(90 * 60000)).catch(() => []);
   for (const d of decs) { const r = byCoin[d.coin]; if (!r) continue; const k = at(r.m.candles, d.ts, 15); await db.update('ap_decisions', 'id=eq.' + d.id, { outcome_price: k.c, outcome_at: new Date(k.t).toISOString() }).catch(() => {}); }
   const s15 = await db.select('ap_samples', 'select=id,ts,price,coin&fwd_15m=is.null&ts=lt.' + iso(16 * 60000) + '&ts=gt.' + iso(95 * 60000)).catch(() => []);
-  for (const x of s15) { const r = byCoin[x.coin]; if (r) await db.update('ap_samples', 'id=eq.' + x.id, { fwd_15m: r4(((at(r.m.candles, x.ts, 15).c - +x.price) / +x.price) * 100) }).catch(() => {}); }
+  await Promise.all(s15.map(async (x) => { const r = byCoin[x.coin]; if (r) await db.update('ap_samples', 'id=eq.' + x.id, { fwd_15m: r4(((at(r.m.candles, x.ts, 15).c - +x.price) / +x.price) * 100) }).catch(() => {}); }));
   const s60 = await db.select('ap_samples', 'select=id,ts,price,coin&fwd_60m=is.null&ts=lt.' + iso(61 * 60000) + '&ts=gt.' + iso(98 * 60000)).catch(() => []);
-  for (const x of s60) { const r = byCoin[x.coin]; if (r) await db.update('ap_samples', 'id=eq.' + x.id, { fwd_60m: r4(((at(r.m.candles, x.ts, 60).c - +x.price) / +x.price) * 100) }).catch(() => {}); }
+  await Promise.all(s60.map(async (x) => { const r = byCoin[x.coin]; if (r) await db.update('ap_samples', 'id=eq.' + x.id, { fwd_60m: r4(((at(r.m.candles, x.ts, 60).c - +x.price) / +x.price) * 100) }).catch(() => {}); }));
   return { rows, db };
 }
 
