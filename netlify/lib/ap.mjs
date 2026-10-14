@@ -109,8 +109,8 @@ export async function newsJob(env, coin) {
   const text = await claude(env.ANTHROPIC_API_KEY, {
     max_tokens: 4000,
     tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
-    system: 'You are the news analyst of a paper-trading desk. Search the web for NEWS FROM THE LAST 48 HOURS that could move the price of the coin: protocol announcements, tokenomics or emissions changes, ETF or listing news, partnerships, hacks or outages, regulation, big macro events. Ignore generic price-prediction articles. Be skeptical: many headlines are already priced in. Finish with ONLY a JSON object: {"sentiment":"bullish"|"bearish"|"neutral","strength":0..1,"catalyst":"short label or none","summary":"max 350 chars, say what happened and when","sources":["url","url"]}',
-    messages: [{ role: 'user', content: 'Coin: ' + c.name + ' (' + coin + '). Today is ' + new Date().toISOString().slice(0, 10) + '. What recent news matters for its price in the next few hours?' }]
+    system: 'You are the news analyst of a paper-trading desk. Search the web for NEWS FROM THE LAST 48 HOURS that could move the price of the coin: protocol announcements, tokenomics or emissions changes, ETF or listing news, partnerships, hacks or outages, regulation, big macro events. Ignore generic price-prediction articles. Be skeptical: many headlines are already priced in. Dates matter: use the date given in the question. If you name a scheduled event (CPI, Fed, ETF launch), give its exact date and say whether it has ALREADY happened as of now; never call a past event upcoming. If sources disagree on a figure or date, say so and use the more conservative reading. Finish with ONLY a JSON object: {"sentiment":"bullish"|"bearish"|"neutral","strength":0..1,"catalyst":"short label or none","summary":"max 350 chars, say what happened and when","sources":["url","url"]}',
+    messages: [{ role: 'user', content: 'Coin: ' + c.name + ' (' + coin + '). Today is ' + new Date().toISOString().slice(0, 10) + '. What recent news matters for its price in the next few hours? Today is ' + new Date().toUTCString() + '.' }]
   });
   const j = lastJson(text) || { sentiment: 'neutral', strength: 0, catalyst: 'none', summary: 'could not parse news reply', sources: [] };
   const row = {
@@ -190,7 +190,7 @@ export async function tick(env, coin) {
 
   const news = (await db.select('ap_news', 'select=*&coin=eq.' + coin + '&order=ts.desc&limit=1'))[0];
   const newsAgeH = news ? (Date.now() - new Date(news.ts).getTime()) / 3600000 : 99;
-  const newsHot = news && newsAgeH < 6 && news.sentiment !== 'neutral' && +news.strength >= 0.6;
+  const newsHot = news && newsAgeH < 3 && news.sentiment !== 'neutral' && +news.strength >= 0.4; // v1.12: only decides whether Claude is asked in a quiet market
   if (Math.abs(m.mom6m_pct) < 0.10 && !newsHot) { out.skip = 'quiet market, no hot news'; return out; }
   const lastDec = (await db.select('ap_decisions', 'select=ts&coin=eq.' + coin + '&order=ts.desc&limit=1'))[0];
   if (lastDec && Date.now() - new Date(lastDec.ts).getTime() < 4 * 60000) { out.skip = 'asked recently'; return out; }
@@ -200,7 +200,7 @@ export async function tick(env, coin) {
   const ctx = {
     coin, now: new Date().toISOString(), bank: +bank.toFixed(2),
     market: { price: m.price, mom6m_pct: +m.mom6m_pct.toFixed(3), change24h_pct: +m.change24h_pct.toFixed(2), funding_pct: +m.funding_pct.toFixed(4), spread_bps: +m.spread_bps.toFixed(2), book_depth_usd: Math.round(m.book_depth_usd), swings: { ret_15m_pct: r4(F.ret_15m), ret_30m_pct: r4(F.ret_30m), ret_60m_pct: r4(F.ret_60m), pullback_from_60m_high_pct: r4(F.pullback_pct), bounce_from_60m_low_pct: r4(F.bounce_pct), range_60m_pct: r4(F.range_60m), vol_1m_pct: r4(F.vol_1m) }, closes_1m_last30: m.candles.slice(-30).map((k) => k.c) },
-    news: news ? { age_hours: +newsAgeH.toFixed(1), sentiment: news.sentiment, strength: +news.strength, catalyst: news.catalyst, summary: news.summary } : 'no news scan yet',
+    news: news && newsAgeH < 6 ? { age_hours: +newsAgeH.toFixed(1), sentiment: news.sentiment, strength: +news.strength, catalyst: news.catalyst, summary: news.summary } : (news ? 'last news scan is over 6 hours old, ignore it' : 'no news scan yet'),
     recent_decisions: hist.map((d) => ({ minutes_ago: Math.round((Date.now() - new Date(d.ts).getTime()) / 60000), action: d.action, confidence: +d.confidence, taken: d.taken, move_after_15m_pct: d.outcome_price ? +(((+d.outcome_price - +d.price) / +d.price) * 100).toFixed(3) : null, reason: String(d.reason || '').slice(0, 120) })),
     recent_closed_trades: trades.map((x) => ({ side: x.side, pnl: +(+x.pnl).toFixed(2), exit: x.close_reason }))
   };

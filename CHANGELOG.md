@@ -2,6 +2,12 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.12
+- Tuned from the first two days of data (162 trades, -$167 net, $119 of it fees; NEAR longs -$151, NEAR shorts +$4).
+- Fade bot trades less: needs a 1.2% range (was 0.8%) and a 0.35% stretch (was 0.25%), and it no longer buys a dip when the last hour is down 0.5%+ (or shorts a bounce when it is up 0.5%+).
+- Autopilot news: the scan is told today's date and must say whether a named event (CPI, Fed) has already happened; conflicting sources are read conservatively. Scans older than 6 hours are no longer shown to the decision step.
+- Autopilot asks Claude in a quiet market when news is 0.4+ strength and under 3 hours old (was 0.6 and 6 hours). The 0.55 confidence gate is unchanged: both skipped 0.50 shorts would have lost.
+
 ## v1.11
 - "Jev stand-in" panel. We don't have the Jev model, so this is our version of the idea: the same paper spread quoter, but it only opens a position on the side a signal picks. Signal = order-book imbalance over the top 10 levels (buy side if the bid side is 25%+ heavier and price isn't falling, sell side for the reverse, otherwise stay out). The side that reduces inventory is always quoted. It runs beside the plain two-sided quoter so the two can be compared.
 - Both quoters now log the signal (book imbalance, 10-second flow) with every fill and every minute (`mm_*` and `jev_*` events in `desk_events`), so we can later train a real buy/sell classifier on our own data.
