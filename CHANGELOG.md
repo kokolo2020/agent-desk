@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.17.1
+- Autopilot page shows total value per desk (the $250 per coin plus closed P&L plus what open trades are worth now, minus the entry fee), with open P&L and % change, in the desk table and two new tiles. All desk numbers now count trades since 18:00 Bangkok only.
+
 ## v1.17
 - Four AI desks side by side, each with its own $250 per coin and all reading the same Claude decision: Normal (gate 55%, max 5 open, top 4 movers), Aggressive (50%, 10, top 8, the original desk), Super (45%, 15, top 12, TP min 0.30%) and Ultra (40%, 25, top 16, TP min 0.25%). Claude now looks at the 16 biggest movers per scan. Stored as coin `XXX:n`, `XXX:s`, `XXX:u` (Aggressive stays `XXX`).
 - Autopilot page: comparison table of all desks and an AI desk mode switch (Normal, Aggressive, Super, Ultra) that drives the KPI tile and the chart.
