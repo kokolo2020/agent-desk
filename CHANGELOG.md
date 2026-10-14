@@ -2,6 +2,10 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.15
+- AI desk is more aggressive: asks Claude about the 8 biggest movers per scan (was 4), up to 10 open trades (was 5), confidence gate 0.50 (was 0.55), spread limit 12 bps (was 8), minimum take profit 0.35%, TP only needs to be 1.2x the stop, and the prompt now says to trade a clear edge instead of defaulting to PASS.
+- Recap workflow fixed (installs ffmpeg).
+
 ## v1.14.2
 - Automatic 6h recap video: a GitHub Action runs at 00:05, 06:05, 12:05 and 18:05 Bangkok time, records the 3 minute recap of the live page and posts it as an MP4 on the repo's Releases page.
 

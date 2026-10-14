@@ -8,7 +8,7 @@ export const TOP = ['BTC', 'ETH', 'XRP', 'BNB', 'SOL', 'DOGE', 'TRX', 'ADA', 'LI
 export const COINS = {};
 for (const s of TOP) COINS[s] = { name: s, inst: s + '-USDT-SWAP', ct: 1 };
 COINS.BTC.name = 'Bitcoin'; COINS.ETH.name = 'Ethereum'; COINS.NEAR.name = 'NEAR Protocol';
-export const MAX_OPEN = 5, PICKS = 4, MAX_SPREAD_BPS = 8;
+export const MAX_OPEN = 10, PICKS = 8, MAX_SPREAD_BPS = 12;
 export const decFor = (p) => (p >= 1000 ? 2 : p >= 10 ? 3 : p >= 1 ? 4 : 6);
 let instAt = 0;
 async function loadInstruments() {
@@ -184,7 +184,7 @@ async function backfillSamples(db, coin, m) {
   for (const x of b) await db.update('ap_samples', 'id=eq.' + x.id, { fwd_60m: r4(((at(x.ts, 60).c - +x.price) / +x.price) * 100) });
 }
 
-const SYSTEM = 'You are CHIEF of an autonomous PAPER trading desk covering the top 20 coins (at most 5 open trades at once; 5x leverage, $250 bank per coin; a rule-based algo desk trades the same coins beside you and you are being compared with it). Round-trip taker fees are 0.11%, so a trade must have a realistic expected move of at least 0.5% to be worth it. Think in this order and let it show in your reason: (1) REGIME: use market_context (breadth of the top 20, BTC trend) to say whether this is a trend, a range or an event-driven chop; (2) EDGE: is this coin stronger or weaker than BTC (this_coin_vs_btc_60m_pct) and is that move continuing or exhausted; (3) CATALYST: only count news that is under 6 hours old, is not already priced in, and whose scheduled event has not already happened; (4) COST: expected move vs the 0.11% fee and the spread; (5) TRACK RECORD: desk_track_record and recent_decisions show what has worked, so do not repeat a losing pattern. PASS is the default and most setups should be PASS. Never chase a move that already ran more than 1.5x the coin\'s normal 15 minute range. Confidence means your honest probability that the trade reaches take profit before the stop: use 0.5 for a coin flip, 0.6+ only with regime, edge and catalyst all agreeing. You choose the exit plan: tp_pct (0.5 to 3), sl_pct (0.25 to 1.5), hold_min (15 to 360); tp_pct must be at least 1.5x sl_pct. Reply with ONLY JSON: {"action":"LONG"|"SHORT"|"PASS","confidence":0..1,"reason":"max 260 chars: regime, edge, catalyst, cost, in that order","tp_pct":number,"sl_pct":number,"hold_min":number}';
+const SYSTEM = 'You are CHIEF of an autonomous PAPER trading desk covering the top 50 coins (at most 10 open trades at once; 5x leverage, $250 bank per coin; a rule-based algo desk trades the same coins beside you and you are being compared with it). Round-trip taker fees are 0.11%, so a trade must have a realistic expected move of at least 0.35% to be worth it. You are in AGGRESSIVE mode: the owner wants more trades, so act on good-enough setups instead of waiting for perfect ones. Think in this order and let it show in your reason: (1) REGIME: use market_context (breadth of the top 20, BTC trend) to say whether this is a trend, a range or an event-driven chop; (2) EDGE: is this coin stronger or weaker than BTC (this_coin_vs_btc_60m_pct) and is that move continuing or exhausted; (3) CATALYST: only count news that is under 6 hours old, is not already priced in, and whose scheduled event has not already happened; (4) COST: expected move vs the 0.11% fee and the spread; (5) TRACK RECORD: desk_track_record and recent_decisions show what has worked, so do not repeat a losing pattern. Take a trade whenever one side has a clear edge (momentum continuing with BTC, or an exhausted spike worth fading); PASS only when there is truly no edge or the move already ran. Never chase a move that already ran more than 2.5x the coin\'s normal 15 minute range. Confidence means your honest probability that the trade reaches take profit before the stop: use 0.5 for a coin flip, 0.55+ when two of regime, edge and catalyst agree. You choose the exit plan: tp_pct (0.35 to 3), sl_pct (0.25 to 1.5), hold_min (15 to 360); tp_pct must be at least 1.2x sl_pct. Reply with ONLY JSON: {"action":"LONG"|"SHORT"|"PASS","confidence":0..1,"reason":"max 260 chars: regime, edge, catalyst, cost, in that order","tp_pct":number,"sl_pct":number,"hold_min":number}';
 
 export async function tick(env, coin, shared) {
   shared = shared || { slots: { n: MAX_OPEN } };
@@ -231,11 +231,11 @@ export async function tick(env, coin, shared) {
   const text = await claude(env.ANTHROPIC_API_KEY, { max_tokens: 1500, system: SYSTEM, messages: [{ role: 'user', content: JSON.stringify(ctx) }] });
   const j = lastJson(text) || { action: 'PASS', confidence: 0, reason: 'could not parse model reply' };
   const action = ['LONG', 'SHORT', 'PASS'].includes(String(j.action).toUpperCase()) ? String(j.action).toUpperCase() : 'PASS';
-  let tpP = Math.max(0.5, Math.min(3, Number(j.tp_pct) || 0.8)), slP = Math.max(0.25, Math.min(1.5, Number(j.sl_pct) || 0.4));
-  if (tpP < slP * 1.5) tpP = +(slP * 1.5).toFixed(2);
+  let tpP = Math.max(0.35, Math.min(3, Number(j.tp_pct) || 0.8)), slP = Math.max(0.25, Math.min(1.5, Number(j.sl_pct) || 0.4));
+  if (tpP < slP * 1.2) tpP = +(slP * 1.2).toFixed(2);
   const hold = Math.max(15, Math.min(360, Number(j.hold_min) || 60));
   const conf = Math.max(0, Math.min(1, Number(j.confidence) || 0));
-  const go = action !== 'PASS' && conf >= 0.55 && shared.slots.n > 0;
+  const go = action !== 'PASS' && conf >= 0.5 && shared.slots.n > 0;
   if (go) shared.slots.n--;
   const dec = await db.insert('ap_decisions', { coin, action, confidence: conf, reason: String(j.reason || '').slice(0, 340), price: m.price, formula_mom: +m.mom6m_pct.toFixed(3), news_summary: news ? (news.catalyst + ': ' + news.summary).slice(0, 300) : null, tp_pct: tpP, sl_pct: slP, hold_min: hold, taken: go });
   out.decision = action + ' ' + conf.toFixed(2);
