@@ -39,7 +39,7 @@
   #chart { position:relative; padding:12px 12px 6px; } #chart svg { width:100%; height:auto; display:block; } #chart text { fill:var(--mut); font:11px system-ui,sans-serif; } #chart text.coin { fill:var(--text); font-weight:650; font-size:12px; } #chart text.val { fill:var(--text); font:600 11px ui-monospace,Menlo,Consolas,monospace; }
   #chart .grid { stroke:var(--line); stroke-width:1; } #chart .zero { stroke:var(--mut); stroke-width:1; } #chart .hit { fill:transparent; } #chart .hit:hover { fill:rgba(128,144,164,.10); }
   #tip { position:absolute; pointer-events:none; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px; font-size:12px; line-height:1.5; box-shadow:0 6px 20px rgba(0,0,0,.35); display:none; z-index:5; min-width:200px; }
-  details { margin-top:8px; } summary { cursor:pointer; color:var(--mut); font-size:12px; margin-bottom:8px; }
+  details { margin-top:8px; } .h2s { color:var(--mut); font-size:12px; letter-spacing:.08em; text-transform:uppercase; font-weight:600; margin:22px 0 8px !important; } .dec > summary { list-style:none; margin:0; display:block; position:relative; padding-left:16px; color:var(--text); font-size:14px; } .dec > summary::-webkit-details-marker { display:none; } .dec > summary::before { content:'▸'; color:var(--mut); position:absolute; left:0; top:0; } .dec[open] > summary::before { content:'▾'; } .dec .when { float:right; color:var(--mut); font-size:12px; } .dec .sum { display:block; color:var(--mut); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; } .dec[open] .sum { display:none; } summary { cursor:pointer; color:var(--mut); font-size:12px; margin-bottom:8px; }
   @media (max-width:600px) { .wrap { padding:12px; } }
 </style>
 </head>
@@ -51,9 +51,9 @@
   <h2>Top 20: profit and loss per coin, Algo desk vs AI desk <span class="mut" style="text-transform:none;letter-spacing:0">· $250 per desk per coin</span> <span style="float:right;text-transform:none;letter-spacing:0"><span class="chip on" data-sort="total">Best total</span><span class="chip" data-sort="edge">AI − Algo</span><span class="chip" data-sort="coin">A–Z</span></span></h2>
   <div class="card" id="chart"></div>
   <details><summary>Table view (same data)</summary><div class="scroll"><table id="tbl"></table></div></details>
-  <h2>Latest decisions</h2>
-  <div style="margin-bottom:8px"><span class="chip" id="fAll">All</span><span class="chip" id="fTrade">Only trade calls</span></div>
-  <div class="card" id="decs"></div>
+  <details id="decSec" open><summary class="h2s">Latest decisions <span class="mut" id="decCount"></span></summary>
+  <div style="margin-bottom:8px"><span class="chip" id="fAll">All</span><span class="chip" id="fTrade">Only trade calls</span><span class="chip" id="fOpen">Expand all</span></div>
+  <div class="card" id="decs"></div></details>
   <h2>Latest news scans</h2><div class="grid" id="news"></div>
   <p class="sub">Paper trading only. Nothing here places real orders. <a href="/">Back to the formula desk</a></p>
 </div>
@@ -148,19 +148,21 @@
     });
   }
   Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (c) { c.onclick = function () { csort = c.getAttribute('data-sort'); Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (x) { x.className = 'chip' + (x === c ? ' on' : ''); }); if (D) chart(); }; });
+  var openDec = {}, allOpen = false;
   function decisions() {
     var list = D.decs.filter(function (d) { return !onlyTrades || d.action !== 'PASS'; });
-    $('fAll').className = 'chip' + (onlyTrades ? '' : ' on'); $('fTrade').className = 'chip' + (onlyTrades ? ' on' : '');
+    $('fAll').className = 'chip' + (onlyTrades ? '' : ' on'); $('fTrade').className = 'chip' + (onlyTrades ? ' on' : ''); $('fOpen').className = 'chip' + (allOpen ? ' on' : ''); $('fOpen').textContent = allOpen ? 'Collapse all' : 'Expand all';
+    $('decCount').textContent = '· ' + list.length + ' shown';
     $('decs').innerHTML = list.length ? list.map(function (d) {
       var mv = d.outcome_price ? ((+d.outcome_price - +d.price) / +d.price * 100) : null, res = '';
       if (mv != null) {
         if (d.action === 'PASS') res = 'price 15m later: ' + pct(mv) + (Math.abs(mv) >= 0.5 ? ' (a real move, was staying out right?)' : ' (small move, staying out was fine)');
         else { var dir = d.action === 'LONG' ? 1 : -1, good = dir * mv > 0; res = 'price 15m later: ' + pct(mv) + ' · <span class="' + (good ? 'up' : 'down') + '">' + (good ? 'moved our way' : 'moved against us') + '</span>'; }
       } else res = 'outcome pending';
-      var parts = String(d.reason || '').split(/\s*[;|]\s*/);
-      return '<div class="dec"><div class="row"><span><span class="pill ' + esc(d.action) + '">' + esc(d.action) + '</span> <b>' + esc(d.coin) + '</b> <span class="mut">conf ' + (+d.confidence).toFixed(2) + '</span><span class="conf"><i style="width:' + Math.round(+d.confidence * 100) + '%"></i></span><span class="mut">' + (d.taken ? 'traded' : 'no trade') + (d.action !== 'PASS' ? ' · TP ' + (+d.tp_pct) + '% SL ' + (+d.sl_pct) + '%' : '') + '</span></span><span class="mut">' + ago(d.ts) + '</span></div>' +
-        '<div class="think">' + esc(d.reason) + '</div><div class="res">' + res + '</div></div>';
-    }).join('') : '<span class="mut">No decisions yet. Claude is asked about the 3 coins with the biggest moves every 5 minutes.</span>';
+      return '<details class="dec" data-id="' + esc(d.id) + '"' + (allOpen || openDec[d.id] ? ' open' : '') + '><summary><span><span class="pill ' + esc(d.action) + '">' + esc(d.action) + '</span> <b>' + esc(d.coin) + '</b> <span class="mut">conf ' + (+d.confidence).toFixed(2) + '</span><span class="conf"><i style="width:' + Math.round(+d.confidence * 100) + '%"></i></span><span class="mut">' + (d.taken ? 'traded' : 'no trade') + (d.action !== 'PASS' ? ' · TP ' + (+d.tp_pct) + '% SL ' + (+d.sl_pct) + '%' : '') + '</span></span><span class="when">' + ago(d.ts) + '</span><span class="sum">' + esc(d.reason) + '</span></summary>' +
+        '<div class="think" style="margin-left:16px">' + esc(d.reason) + '</div><div class="res" style="margin-left:16px">' + res + '</div></details>';
+    }).join('') : '<span class="mut">No decisions yet. Claude is asked about the 4 coins with the biggest moves every 5 minutes.</span>';
+    Array.prototype.forEach.call($('decs').querySelectorAll('details.dec'), function (el) { el.addEventListener('toggle', function () { openDec[el.getAttribute('data-id')] = el.open; }); });
   }
   function newsCards() {
     $('news').innerHTML = D.news.length ? D.news.map(function (n) {
@@ -175,7 +177,7 @@
       $('status').textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · refreshes every 30s · ' + D.rows.length + ' coins tracked';
     }).catch(function (e) { $('status').innerHTML = '<span class="err">could not load: ' + esc(e.message) + '</span>'; });
   }
-  $('fAll').onclick = function () { onlyTrades = false; if (D) decisions(); }; $('fTrade').onclick = function () { onlyTrades = true; if (D) decisions(); };
+  $('fOpen').onclick = function () { allOpen = !allOpen; openDec = {}; if (D) decisions(); }; $('fAll').onclick = function () { onlyTrades = false; if (D) decisions(); }; $('fTrade').onclick = function () { onlyTrades = true; if (D) decisions(); };
   load(); setInterval(load, 30000);
 })();
 </script>

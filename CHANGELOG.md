@@ -9,7 +9,7 @@ Every push bumps the version. The version shows next to the title on the page, s
 - Both desks start at $250 per coin (was $150 for the AI desk), so the Autopilot page compares them side by side with a total and an "AI minus Algo" column.
 - AI thinking upgrade: it now sees market breadth across the top 20, BTC's trend, how the coin moves against BTC, and the desk's recent win/loss by side. The prompt makes it reason in order (regime, edge, catalyst, cost, track record), defines confidence as the chance of hitting take profit first, raises the minimum take profit to 0.5%, and tells it a rule-based desk is being compared with it. Reasons are stored up to 340 characters.
 - News scan: one coin every 15 minutes (BTC, coins with an open trade, or the biggest 24h movers, oldest scan first) instead of fixed BTC and NEAR jobs.
-- Autopilot page redesigned: summary tiles, one chart of profit and loss for all coins (Algo bars vs AI bars, sortable, hover for details, table view underneath), decisions with a confidence bar and what price did afterwards.
+- Autopilot page redesigned (decisions list is collapsible, one line each until opened): summary tiles, one chart of profit and loss for all coins (Algo bars vs AI bars, sortable, hover for details, table view underneath), decisions with a confidence bar and what price did afterwards.
 
 ## v1.12
 - Tuned from the first two days of data (162 trades, -$167 net, $119 of it fees; NEAR longs -$151, NEAR shorts +$4).
