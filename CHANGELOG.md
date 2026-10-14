@@ -2,6 +2,10 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.17
+- Four AI desks side by side, each with its own $250 per coin and all reading the same Claude decision: Normal (gate 55%, max 5 open, top 4 movers), Aggressive (50%, 10, top 8, the original desk), Super (45%, 15, top 12, TP min 0.30%) and Ultra (40%, 25, top 16, TP min 0.25%). Claude now looks at the 16 biggest movers per scan. Stored as coin `XXX:n`, `XXX:s`, `XXX:u` (Aggressive stays `XXX`).
+- Autopilot page: comparison table of all desks and an AI desk mode switch (Normal, Aggressive, Super, Ultra) that drives the KPI tile and the chart.
+
 ## v1.16
 - Manage coins panel on the autopilot page: remove a coin, or add any live OKX USDT swap (checked against OKX first; at 50 you pick which coin it replaces). Saved as a watchlist row in desk_events, and the server reads the newest one every scan. Always exactly 50 coins (an empty slot is filled by the next spare), and a coin with an open trade stays until the trade closes.
 

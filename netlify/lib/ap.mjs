@@ -6,7 +6,17 @@ export const TOP_N = 50;
 // market-cap order; extras at the end are spares, so 50 stay live if OKX lacks a few
 export const TOP = ['BTC', 'ETH', 'XRP', 'BNB', 'SOL', 'DOGE', 'TRX', 'ADA', 'LINK', 'AVAX', 'SUI', 'XLM', 'BCH', 'HBAR', 'LTC', 'TON', 'DOT', 'UNI', 'AAVE', 'NEAR', 'SHIB', 'PEPE', 'ETC', 'APT', 'ARB', 'OP', 'ATOM', 'FIL', 'ICP', 'INJ', 'TAO', 'ONDO', 'POL', 'CRO', 'ALGO', 'VET', 'TIA', 'SEI', 'RENDER', 'WLD', 'FET', 'ENA', 'JUP', 'PENDLE', 'LDO', 'STX', 'IMX', 'GRT', 'CRV', 'MKR', 'XMR', 'ZEC', 'TRUMP', 'BONK', 'WIF', 'FLOKI'];
 export const COINS = {};
-export const MAX_OPEN = 10, PICKS = 8, MAX_SPREAD_BPS = 12;
+export const MAX_SPREAD_BPS = 12;
+/* Four AI desks read the SAME Claude decision and differ only in how easily they act on it. Each has its own $250 per coin.
+   Normal ':n', Aggressive '' (the original desk), Super ':s', Ultra ':u'. picks = how many of the biggest movers it may trade. */
+export const MODES = [
+  { id: 'n', suffix: ':n', name: 'Normal', gate: 0.55, cap: 5, picks: 4, minTp: 0.5 },
+  { id: 'a', suffix: '', name: 'Aggressive', gate: 0.50, cap: 10, picks: 8, minTp: 0.35 },
+  { id: 's', suffix: ':s', name: 'Super', gate: 0.45, cap: 15, picks: 12, minTp: 0.3 },
+  { id: 'u', suffix: ':u', name: 'Ultra', gate: 0.40, cap: 25, picks: 16, minTp: 0.25 }
+];
+export const PICKS = 16;
+const modeOf = (key) => (/:n$/.test(key) ? 'n' : /:s$/.test(key) ? 's' : /:u$/.test(key) ? 'u' : key.includes(':') ? null : 'a');
 export const decFor = (p) => (p >= 1000 ? 2 : p >= 10 ? 3 : p >= 1 ? 4 : 6);
 let instAt = 0, INST = {};
 /* Watchlist: the page appends a desk_events row (kind 'watchlist', data.list). The newest one wins. Always 50 live coins:
@@ -195,7 +205,8 @@ async function backfillSamples(db, coin, m) {
 const SYSTEM = 'You are CHIEF of an autonomous PAPER trading desk covering the top 50 coins (at most 10 open trades at once; 5x leverage, $250 bank per coin; a rule-based algo desk trades the same coins beside you and you are being compared with it). Round-trip taker fees are 0.11%, so a trade must have a realistic expected move of at least 0.35% to be worth it. You are in AGGRESSIVE mode: the owner wants more trades, so act on good-enough setups instead of waiting for perfect ones. Think in this order and let it show in your reason: (1) REGIME: use market_context (breadth of the top 20, BTC trend) to say whether this is a trend, a range or an event-driven chop; (2) EDGE: is this coin stronger or weaker than BTC (this_coin_vs_btc_60m_pct) and is that move continuing or exhausted; (3) CATALYST: only count news that is under 6 hours old, is not already priced in, and whose scheduled event has not already happened; (4) COST: expected move vs the 0.11% fee and the spread; (5) TRACK RECORD: desk_track_record and recent_decisions show what has worked, so do not repeat a losing pattern. Take a trade whenever one side has a clear edge (momentum continuing with BTC, or an exhausted spike worth fading); PASS only when there is truly no edge or the move already ran. Never chase a move that already ran more than 2.5x the coin\'s normal 15 minute range. Confidence means your honest probability that the trade reaches take profit before the stop: use 0.5 for a coin flip, 0.55+ when two of regime, edge and catalyst agree. You choose the exit plan: tp_pct (0.35 to 3), sl_pct (0.25 to 1.5), hold_min (15 to 360); tp_pct must be at least 1.2x sl_pct. Reply with ONLY JSON: {"action":"LONG"|"SHORT"|"PASS","confidence":0..1,"reason":"max 260 chars: regime, edge, catalyst, cost, in that order","tp_pct":number,"sl_pct":number,"hold_min":number}';
 
 export async function tick(env, coin, shared) {
-  shared = shared || { slots: { n: MAX_OPEN } };
+  shared = shared || { modes: { n: { n: 5 }, a: { n: 10 }, s: { n: 15 }, u: { n: 25 } }, rank: {} };
+  const rank = shared.rank && shared.rank[coin] != null ? shared.rank[coin] : 99;
   if (!env.SUPABASE_SERVICE_KEY || !env.ANTHROPIC_API_KEY) return { skipped: 'missing keys' };
   const db = sb(env.SUPABASE_SERVICE_KEY);
   const m = await getMarket(coin);
@@ -213,10 +224,16 @@ export async function tick(env, coin, shared) {
     out.bank = +(bank + r.pnl).toFixed(2);
     return out; // cooldown starts now
   }
-  if (closedAll[0] && Date.now() - new Date(closedAll[0].closed_at).getTime() < COOLDOWN_MIN * 60000) { out.skip = 'cooldown'; return out; }
-  if (bank < 20) { out.skip = 'bank too low'; return out; }
   if (m.spread_bps > MAX_SPREAD_BPS) { out.skip = 'spread too wide ' + m.spread_bps.toFixed(1) + 'bps'; return out; }
-  if (shared.slots.n <= 0) { out.skip = 'open-position cap'; return out; }
+  // which desks could act on a decision for this coin right now
+  const mir = await db.select('ap_positions', 'select=coin,pnl,closed_at,status&or=(coin.eq.' + coin + ':n,coin.eq.' + coin + ':s,coin.eq.' + coin + ':u)&order=closed_at.desc.nullsfirst&limit=400').catch(() => []);
+  const elig = {};
+  for (const md of MODES) {
+    const key = coin + md.suffix, rows = md.id === 'a' ? closedAll : mir.filter((x) => x.coin === key && x.status === 'closed'), hasOpen = md.id !== 'a' && mir.some((x) => x.coin === key && x.status === 'open');
+    const bk = START + rows.reduce((q, x) => q + +x.pnl, 0), last = rows[0] && rows[0].closed_at;
+    elig[md.id] = { bank: bk, ok: rank < md.picks && shared.modes[md.id].n > 0 && !hasOpen && bk >= 20 && !(last && Date.now() - new Date(last).getTime() < COOLDOWN_MIN * 60000) };
+  }
+  if (!MODES.some((md) => elig[md.id].ok)) { out.skip = 'no desk can trade this coin now'; return out; }
 
   const news = (await db.select('ap_news', 'select=*&coin=eq.' + coin + '&order=ts.desc&limit=1'))[0];
   const newsAgeH = news ? (Date.now() - new Date(news.ts).getTime()) / 3600000 : 99;
@@ -243,15 +260,18 @@ export async function tick(env, coin, shared) {
   if (tpP < slP * 1.2) tpP = +(slP * 1.2).toFixed(2);
   const hold = Math.max(15, Math.min(360, Number(j.hold_min) || 60));
   const conf = Math.max(0, Math.min(1, Number(j.confidence) || 0));
-  const go = action !== 'PASS' && conf >= 0.5 && shared.slots.n > 0;
-  if (go) shared.slots.n--;
+  const go = action !== 'PASS' && conf >= 0.5 && elig.a.ok;
   const dec = await db.insert('ap_decisions', { coin, action, confidence: conf, reason: String(j.reason || '').slice(0, 340), price: m.price, formula_mom: +m.mom6m_pct.toFixed(3), news_summary: news ? (news.catalyst + ': ' + news.summary).slice(0, 300) : null, tp_pct: tpP, sl_pct: slP, hold_min: hold, taken: go });
   out.decision = action + ' ' + conf.toFixed(2);
-  if (go) {
-    const dir = action === 'LONG' ? 1 : -1, notional = bank * LEV;
-    await db.insert('ap_positions', { coin, side: action, entry_price: m.price, size: notional / m.price, notional, tp: +(m.price * (1 + dir * tpP / 100)).toFixed(decFor(m.price) + 2), sl: +(m.price * (1 - dir * slP / 100)).toFixed(decFor(m.price) + 2), max_hold_until: new Date(Date.now() + hold * 60000).toISOString(), decision_id: dec.id });
-    out.opened = action;
+  const opened = [];
+  if (action !== 'PASS') for (const md of MODES) {
+    if (!elig[md.id].ok || conf < md.gate) continue;
+    const tpM = Math.max(md.minTp, tpP), dir = action === 'LONG' ? 1 : -1, bk = elig[md.id].bank, notional = bk * LEV, d = decFor(m.price) + 2;
+    shared.modes[md.id].n--;
+    await db.insert('ap_positions', { coin: coin + md.suffix, side: action, entry_price: m.price, size: notional / m.price, notional, tp: +(m.price * (1 + dir * tpM / 100)).toFixed(d), sl: +(m.price * (1 - dir * slP / 100)).toFixed(d), max_hold_until: new Date(Date.now() + hold * 60000).toISOString(), decision_id: dec.id });
+    opened.push(md.id);
   }
+  if (opened.length) out.opened = action + ' on ' + opened.join(',');
   return out;
 }
 
@@ -329,24 +349,28 @@ export async function tickAll(env) {
   if (!env.SUPABASE_SERVICE_KEY || !env.ANTHROPIC_API_KEY) return [{ skipped: 'missing keys' }];
   const { rows, db } = await scanAll(env);
   const openAll = await db.select('ap_positions', 'select=*&status=eq.open');
-  const open = openAll.filter((p) => !p.coin.includes(':')), openAlgo = {};
+  const open = openAll.filter((p) => !p.coin.includes(':')), openAlgo = {}, openMir = openAll.filter((p) => /:[nsu]$/.test(p.coin)), cnt = { n: 0, a: 0, s: 0, u: 0 };
+  for (const p of openAll) { const k = modeOf(p.coin); if (k) cnt[k]++; }
   for (const p of openAll) if (p.coin.endsWith(':algo')) openAlgo[p.coin] = p;
   const openSet = new Set(open.map((p) => p.coin)), closedAlgo = {};
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   const algoRes = await Promise.all(rows.map((r) => algoTick(db, r, openAlgo, closedAlgo).then((s) => r.coin + ' ' + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60))));
+  const mirRes = await Promise.all(openMir.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? manageOpen(db, pp, r.m).then((x) => { if (x.closed) cnt[modeOf(pp.coin)]--; return x.closed ? pp.coin + ' closed ' + x.pnl.toFixed(2) : null; }).catch(() => null) : null; }));
   const rets = rows.map((r) => r.F.ret_60m).sort((x, y) => x - y), btc = rows.find((r) => r.coin === 'BTC');
   const closed = await db.select('ap_positions', 'select=side,pnl&status=eq.closed&coin=not.like.*:*&order=closed_at.desc&limit=40').catch(() => []);
   const trk = (s) => { const a = closed.filter((x) => x.side === s); return { trades: a.length, wins: a.filter((x) => +x.pnl > 0).length, pnl: +a.reduce((p, x) => p + +x.pnl, 0).toFixed(2) }; };
   const shared = {
-    slots: { n: MAX_OPEN - open.length }, btc60: btc ? btc.F.ret_60m : null,
+    modes: Object.fromEntries(MODES.map((md) => [md.id, { n: md.cap - cnt[md.id] }])), btc60: btc ? btc.F.ret_60m : null,
     mkt: { coins_scanned: rows.length, up_60m: rows.filter((r) => r.F.ret_60m > 0).length, down_60m: rows.filter((r) => r.F.ret_60m < 0).length, median_ret_60m_pct: r4(rets[Math.floor(rets.length / 2)] || 0), btc_ret_60m_pct: btc ? r4(btc.F.ret_60m) : null, btc_change24h_pct: btc ? r4(btc.m.change24h_pct) : null },
     track: { last_40_closed: { LONG: trk('LONG'), SHORT: trk('SHORT') } }
   };
   // manage every open trade, then ask Claude about the PICKS coins whose move is biggest versus their own noise
   const picks = rows.filter((r) => !openSet.has(r.coin)).sort((a, b) => b.z - a.z).slice(0, PICKS).map((r) => r.coin);
+  shared.rank = {}; picks.forEach((c, i) => { shared.rank[c] = i; });
+  for (const md of MODES) shared.modes[md.id].n = md.cap - cnt[md.id];
   const todo = Array.from(openSet).concat(picks).filter((s) => COINS[s]);
   const res = await Promise.all(todo.map((coin) => tick(env, coin, shared).catch((e) => ({ coin, error: String(e.message || e).slice(0, 200) }))));
-  return [{ scanned: rows.length, picks, open: Array.from(openSet), algo: algoRes.filter((x) => /opened|closed|error/.test(x)) }].concat(res);
+  return [{ scanned: rows.length, picks, open: Array.from(openSet), algo: algoRes.filter((x) => /opened|closed|error/.test(x)), mirrorsClosed: mirRes.filter(Boolean), openByDesk: cnt }].concat(res);
 }
 
 /* Pick which coin the news job scans next: coins with an open trade or the biggest 24h move, oldest scan first. */

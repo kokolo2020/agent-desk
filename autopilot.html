@@ -52,6 +52,8 @@
   <h1>AUTOPILOT <small>ap-v1.13 · top 50 coins · paper money · decided by Claude · runs on the server</small></h1>
   <div class="sub" id="status">loading…</div>
   <div class="kpis" id="kpis"></div>
+  <div class="card" id="cmp" style="margin-bottom:10px"></div>
+  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="mut">AI desk mode:</span><span class="chip" data-aim=":n">Normal</span><span class="chip on" data-aim="">Aggressive</span><span class="chip" data-aim=":s">Super</span><span class="chip" data-aim=":u">Ultra</span></div>
   <h2>Top 50 race: what $250 in each coin is worth now <span class="mut" style="text-transform:none;letter-spacing:0">· every line starts at $250 · hover a line, click to open a coin</span></h2>
   <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" id="recap">🎬 6h recap (3 min)</span><span id="recapMsg" class="mut"></span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="0">Since 18:00</span><span class="chip" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
   <div class="card" id="chart"></div>
@@ -82,21 +84,33 @@
     smp.forEach(function (x) { if (!latest[x.coin]) latest[x.coin] = x; });
     Object.keys(latest).forEach(function (c) { coins[c] = true; }); pos.forEach(function (p) { coins[p.coin.split(':')[0]] = true; });
     var btc = latest.BTC, rows = Object.keys(coins).map(function (c) {
-      var ai = stats(pos.filter(function (p) { return p.coin === c; })), al = stats(pos.filter(function (p) { return p.coin === c + ':algo'; })), l = latest[c], d = decs.filter(function (x) { return x.coin === c; })[0];
+      var ai = stats(pos.filter(function (p) { return p.coin === c + AIM; })), al = stats(pos.filter(function (p) { return p.coin === c + ':algo'; })), l = latest[c], d = decs.filter(function (x) { return x.coin === c; })[0];
       return { coin: c, price: l ? +l.price : null, ch24: l ? +l.change24h : null, r60: l ? +l.ret_60m : null, rel: l && btc ? +l.ret_60m - +btc.ret_60m : null, ai: ai, al: al, aiPnl: ai.pnl, alPnl: al.pnl, edge: ai.pnl - al.pnl, last: d };
     });
     D = { rows: rows, decs: decs, news: news, pos: pos, latest: latest };
   }
+  var AIM = '', AIN = { '': 'Aggressive', ':n': 'Normal', ':s': 'Super', ':u': 'Ultra' }, AICAP = { '': 10, ':n': 5, ':s': 15, ':u': 25 };
+  function inAI(c) { return AIM === '' ? c.indexOf(':') < 0 : c.slice(-2) === AIM; }
+  function cmpTable() {
+    var rowsH = [[':n', 'Normal', 'gate 55% · max 5 open · top 4 movers'], ['', 'Aggressive', 'gate 50% · max 10 open · top 8'], [':s', 'Super', 'gate 45% · max 15 open · top 12'], [':u', 'Ultra', 'gate 40% · max 25 open · top 16']].map(function (m) {
+      var k = m[0], a = stats(D.pos.filter(function (p) { return k === '' ? p.coin.indexOf(':') < 0 : p.coin.slice(-2) === k; })), op = D.pos.filter(function (p) { return p.status === 'open' && (k === '' ? p.coin.indexOf(':') < 0 : p.coin.slice(-2) === k); }).length;
+      return '<tr><td><b>' + m[1] + '</b> <span class="mut">' + m[2] + '</span></td><td class="num">' + a.trades + '</td><td class="num">' + (a.trades ? Math.round(a.w / a.trades * 100) + '%' : '–') + '</td><td class="num ' + cls(a.pnl) + '">' + money(a.pnl) + '</td><td class="num">$' + a.fees.toFixed(2) + '</td><td class="num">' + op + '</td></tr>';
+    }).join('');
+    var al = stats(D.pos.filter(function (p) { return /:algo$/.test(p.coin); }));
+    rowsH += '<tr><td><b>Algo</b> <span class="mut">rules, no AI</span></td><td class="num">' + al.trades + '</td><td class="num">' + (al.trades ? Math.round(al.w / al.trades * 100) + '%' : '–') + '</td><td class="num ' + cls(al.pnl) + '">' + money(al.pnl) + '</td><td class="num">$' + al.fees.toFixed(2) + '</td><td class="num">' + D.pos.filter(function (p) { return p.status === 'open' && /:algo$/.test(p.coin); }).length + '</td></tr>';
+    $('cmp').innerHTML = '<div class="scroll"><table><tr><th>Desk (all use the same Claude calls)</th><th class="num">Closed</th><th class="num">Win</th><th class="num">P&amp;L</th><th class="num">Fees</th><th class="num">Open</th></tr>' + rowsH + '</table></div>';
+  }
   function kpis() {
-    var ai = stats(D.pos.filter(function (p) { return p.coin.indexOf(':') < 0; })), al = stats(D.pos.filter(function (p) { return /:algo$/.test(p.coin); }));
+    cmpTable();
+    var ai = stats(D.pos.filter(function (p) { return inAI(p.coin); })), al = stats(D.pos.filter(function (p) { return /:algo$/.test(p.coin); }));
     var nc = D.rows.length, lat = Object.keys(D.latest).map(function (c) { return D.latest[c]; }), up = lat.filter(function (x) { return +x.ret_60m > 0; }).length;
     var wr = function (s) { return s.trades ? Math.round(s.w / s.trades * 100) + '% win' : 'no trades'; };
     var cell = function (l, v, n, c) { return '<div class="kpi"><div class="l">' + l + '</div><div class="v ' + (c || '') + '">' + v + '</div><div class="n">' + n + '</div></div>'; };
     $('kpis').innerHTML = cell('Algo desk P&amp;L', money(al.pnl), al.trades + ' trades · ' + wr(al) + ' · fees $' + al.fees.toFixed(2), cls(al.pnl)) +
-      cell('AI desk P&amp;L', money(ai.pnl), ai.trades + ' trades · ' + wr(ai) + ' · fees $' + ai.fees.toFixed(2), cls(ai.pnl)) +
+      cell(AIN[AIM] + ' AI P&amp;L', money(ai.pnl), ai.trades + ' trades · ' + wr(ai) + ' · fees $' + ai.fees.toFixed(2), cls(ai.pnl)) +
       cell('Leader', ai.pnl === al.pnl ? 'tie' : ai.pnl > al.pnl ? 'AI' : 'Algo', 'by ' + money(Math.abs(ai.pnl - al.pnl)) + ' so far') +
-      cell('Bank per desk', '$' + START, nc + ' coins × 2 desks × $' + START + ' = $' + (nc * 2 * START)) +
-      cell('Open now', D.pos.filter(function (p) { return p.status === 'open'; }).length, D.pos.filter(function (p) { return p.status === 'open' && /:algo$/.test(p.coin); }).length + ' algo · ' + D.pos.filter(function (p) { return p.status === 'open' && p.coin.indexOf(':') < 0; }).length + ' AI (AI cap is 5)') +
+      cell('Bank per desk', '$' + START, nc + ' coins × 5 desks × $' + START + ' = $' + (nc * 5 * START)) +
+      cell('Open now', D.pos.filter(function (p) { return p.status === 'open'; }).length, D.pos.filter(function (p) { return p.status === 'open' && /:algo$/.test(p.coin); }).length + ' algo · ' + D.pos.filter(function (p) { return p.status === 'open' && inAI(p.coin); }).length + ' ' + AIN[AIM] + ' AI (cap ' + AICAP[AIM] + ')') +
       cell('Market (60m)', lat.length ? up + ' up · ' + (lat.length - up) + ' down' : '–', 'breadth of ' + lat.length + ' coins');
   }
   function deskCell(s) {
@@ -140,7 +154,7 @@
     function lev(pts, L) { var dead = false; return pts.map(function (q) { if (dead) return 0; var v = START * (1 + L * (q.p / pts[0].p - 1)); if (v <= 0) { dead = true; return 0; } return v; }); }
     EQ.S = Object.keys(by).map(function (coin) {
       var pts = by[coin]; if (pts.length < 2) return null;
-      return { coin: coin, t: pts.map(function (q) { return q.t; }), price: pts.map(function (q) { return q.p; }), hold: pts.map(function (q) { return START * q.p / pts[0].p; }), h15: lev(pts, 1.5), h2: lev(pts, 2), h3: lev(pts, 3), al: eq(posBy[coin + ':algo'] || [], pts), ai: eq(posBy[coin] || [], pts), trades: { al: posBy[coin + ':algo'] || [], ai: posBy[coin] || [] } };
+      return { coin: coin, t: pts.map(function (q) { return q.t; }), price: pts.map(function (q) { return q.p; }), hold: pts.map(function (q) { return START * q.p / pts[0].p; }), h15: lev(pts, 1.5), h2: lev(pts, 2), h3: lev(pts, 3), al: eq(posBy[coin + ':algo'] || [], pts), ai: eq(posBy[coin + AIM] || [], pts), trades: { al: posBy[coin + ':algo'] || [], ai: posBy[coin + AIM] || [] } };
     }).filter(Boolean);
     EQ.S.forEach(function (s) { s.v = s[EQ.mode]; s.end = s.v[s.v.length - 1]; });
   }
@@ -178,7 +192,7 @@
     function path(s, vals) { c.beginPath(); s.t.forEach(function (t, i) { var x = g.X(t), y = g.Y(vals[i]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); }
     var act = EQ.pin || EQ.hov;
     if (EQ.pin) {
-      var s = g.S[0], defs = [['hold', 'Holding the coin', mut, [6, 5]], ['al', 'Algo desk', s1, []], ['ai', 'AI desk', s2, []]]; if ({ h15: 1, h2: 1, h3: 1 }[EQ.mode]) defs.splice(1, 0, [EQ.mode, 'Holding ' + ({ h15: '1.5x', h2: '2x', h3: '3x' })[EQ.mode], css('--warn'), [2, 3]]);
+      var s = g.S[0], defs = [['hold', 'Holding the coin', mut, [6, 5]], ['al', 'Algo desk', s1, []], ['ai', AIN[AIM] + ' AI', s2, []]]; if ({ h15: 1, h2: 1, h3: 1 }[EQ.mode]) defs.splice(1, 0, [EQ.mode, 'Holding ' + ({ h15: '1.5x', h2: '2x', h3: '3x' })[EQ.mode], css('--warn'), [2, 3]]);
       defs.forEach(function (df) {
         var vals = s[df[0]]; c.save(); c.shadowColor = df[2]; c.shadowBlur = df[0] === 'hold' ? 0 : 14; c.strokeStyle = df[2]; c.lineWidth = df[0] === 'hold' ? 1.6 : 2.6; c.setLineDash(df[3]); c.lineJoin = 'round'; path(s, vals); c.stroke(); c.restore();
         var gr = c.createLinearGradient(0, g.Y(Math.max.apply(null, vals)), 0, g.Y(START)); if (df[0] !== 'hold') { c.save(); path(s, vals); c.lineTo(g.X(s.t[s.t.length - 1]), g.Y(START)); c.lineTo(g.X(s.t[0]), g.Y(START)); c.closePath(); gr.addColorStop(0, rgba(df[2], 0.18)); gr.addColorStop(1, rgba(df[2], 0)); c.fillStyle = gr; c.fill(); c.restore(); }
@@ -216,7 +230,7 @@
     function pos(e) { var r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, r: r }; }
     cv.addEventListener('pointermove', function (e) {
       var q = pos(e), g = EQ.g; if (!g) return; EQ.mx = q.x; EQ.my = q.y; var t = g.t0 + (q.x - g.L) / Math.max(g.W - g.L - g.R, 1) * (g.t1 - g.t0); t = Math.max(g.t0, Math.min(g.t1, t));
-      if (EQ.pin) { var s = g.S[0], rows = [['Holding the coin', interp(s, 'hold', t), css('--mut')]].concat({ h15: 1, h2: 1, h3: 1 }[EQ.mode] ? [['Holding ' + ({ h15: '1.5x', h2: '2x', h3: '3x' })[EQ.mode], interp(s, EQ.mode, t), css('--warn')]] : []).concat([['Algo desk', interp(s, 'al', t), css('--s1')], ['AI desk', interp(s, 'ai', t), css('--s2')]]), dt = new Date(t);
+      if (EQ.pin) { var s = g.S[0], rows = [['Holding the coin', interp(s, 'hold', t), css('--mut')]].concat({ h15: 1, h2: 1, h3: 1 }[EQ.mode] ? [['Holding ' + ({ h15: '1.5x', h2: '2x', h3: '3x' })[EQ.mode], interp(s, EQ.mode, t), css('--warn')]] : []).concat([['Algo desk', interp(s, 'al', t), css('--s1')], [(AIN[AIM] + ' AI'), interp(s, 'ai', t), css('--s2')]]), dt = new Date(t);
         tip.innerHTML = '<div class="mut" style="margin-bottom:4px"><b style="color:var(--text)">' + esc(s.coin) + '</b> · ' + hm(t) + ' Bangkok</div>' + rows.map(function (r) { return '<div class="trow"><span><span style="color:' + r[2] + '">■</span> ' + r[0] + '</span><span class="mono ' + cls(r[1] - START) + '">$' + r[1].toFixed(2) + ' (' + pct((r[1] - START) / START * 100, 1) + ')</span></div>'; }).join('');
       } else {
         var best = null, bd = 1e9, list = g.S.map(function (s) { var v = interp(s, null, t), d2 = Math.abs(g.Y(v) - q.y); if (d2 < bd) { bd = d2; best = s; } return { c: s.coin, v: v }; });
@@ -234,7 +248,7 @@
   function unpin() { EQ.pin = null; EQ.prog = 0.55; head(); lbSel(); kick(); }
   function head() {
     var S = EQ.S, h = $('eqhead'); if (!h) return;
-    if (EQ.pin) { var s = S.filter(function (x) { return x.coin === EQ.pin; })[0]; if (!s) { EQ.pin = null; return head(); } var f = function (k) { var v = s[k][s[k].length - 1]; return '<span>' + ({ hold: 'Holding', h15: 'Holding 1.5x', h2: 'Holding 2x', h3: 'Holding 3x', al: 'Algo desk', ai: 'AI desk' })[k] + ' <b class="' + cls(v - START) + '">$' + v.toFixed(2) + '</b></span>'; };
+    if (EQ.pin) { var s = S.filter(function (x) { return x.coin === EQ.pin; })[0]; if (!s) { EQ.pin = null; return head(); } var f = function (k) { var v = s[k][s[k].length - 1]; return '<span>' + ({ hold: 'Holding', h15: 'Holding 1.5x', h2: 'Holding 2x', h3: 'Holding 3x', al: 'Algo desk', ai: (AIN[AIM] + ' AI') })[k] + ' <b class="' + cls(v - START) + '">$' + v.toFixed(2) + '</b></span>'; };
       h.innerHTML = '<b style="color:' + coinCol(s.coin) + ';font-size:14px">' + esc(s.coin) + '</b>' + f('hold') + ({ h15: 1, h2: 1, h3: 1 }[EQ.mode] ? f(EQ.mode) : '') + '<span style="color:var(--s1)">■ Algo</span><span style="color:var(--s2)">■ AI</span><span>▲ long ▼ short opened · ● closed</span><span class="chip" id="unpin">✕ all coins</span>'; $('unpin').onclick = unpin; return; }
     var tot = S.reduce(function (a, s) { return a + s.end; }, 0), base = START * S.length, upn = S.filter(function (s) { return s.end >= START; }).length, wiped = S.filter(function (s) { return s.end <= 0; }).length, LV = { h15: '1.5x', h2: '2x', h3: '3x' }, lbl = EQ.mode === 'hold' ? 'Just holding each coin (1x, no trading)' : LV[EQ.mode] ? 'Holding each coin at ' + LV[EQ.mode] + ' leverage (no trading' + (wiped ? ', ' + wiped + ' wiped out' : '') + ')' : EQ.mode === 'al' ? 'Algo desk (rules), real value incl. open trades' : 'AI desk (Claude), real value incl. open trades';
     h.innerHTML = '<b style="color:var(--text)">' + lbl + '</b><span>' + S.length + ' coins · $' + tot.toFixed(0) + ' of $' + base + ' (<span class="' + cls(tot - base) + '">' + pct((tot - base) / base * 100) + '</span>)</span><span>' + upn + ' above · ' + (S.length - upn) + ' below $' + START + '</span>';
@@ -248,6 +262,7 @@
   function lbSel() { var el = $('eqlb'); if (!el) return; Array.prototype.forEach.call(el.querySelectorAll('.lbr'), function (r) { var c = r.getAttribute('data-c'); r.className = 'lbr' + (c === EQ.hov || c === EQ.pin ? ' on' : ''); }); }
   Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (c) { c.onclick = function () { EQ.mode = c.getAttribute('data-mode'); Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (x) { x.className = 'chip' + (x === c ? ' on' : ''); }); if (EQ.rows) { eqBuild(); EQ.prog = 0.35; refresh(); } }; });
   Array.prototype.forEach.call(document.querySelectorAll('[data-win]'), function (c) { c.onclick = function () { EQ.hrs = +c.getAttribute('data-win'); Array.prototype.forEach.call(document.querySelectorAll('[data-win]'), function (x) { x.className = 'chip' + (x === c ? ' on' : ''); }); EQ.pin = null; EQ.S = []; EQ.built = false; $('chart').innerHTML = '<div class="mut">loading…</div>'; eqLoad(); }; });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-aim]'), function (c) { c.onclick = function () { AIM = c.getAttribute('data-aim'); Array.prototype.forEach.call(document.querySelectorAll('[data-aim]'), function (x) { x.classList.toggle('on', x === c); }); EQ.pin = EQ.pin; if (EQ.rows) eqBuild(); load(); refresh(); }; });
   $('replay').onclick = function () { EQ.dur = 0; EQ.prog = 0; kick(); };
   /* 6h recap: replays the last 6 hours over 3 minutes and records the chart to a video file you can download */
   var REC = null;
