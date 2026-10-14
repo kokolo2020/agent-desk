@@ -6,23 +6,30 @@ export const TOP_N = 50;
 // market-cap order; extras at the end are spares, so 50 stay live if OKX lacks a few
 export const TOP = ['BTC', 'ETH', 'XRP', 'BNB', 'SOL', 'DOGE', 'TRX', 'ADA', 'LINK', 'AVAX', 'SUI', 'XLM', 'BCH', 'HBAR', 'LTC', 'TON', 'DOT', 'UNI', 'AAVE', 'NEAR', 'SHIB', 'PEPE', 'ETC', 'APT', 'ARB', 'OP', 'ATOM', 'FIL', 'ICP', 'INJ', 'TAO', 'ONDO', 'POL', 'CRO', 'ALGO', 'VET', 'TIA', 'SEI', 'RENDER', 'WLD', 'FET', 'ENA', 'JUP', 'PENDLE', 'LDO', 'STX', 'IMX', 'GRT', 'CRV', 'MKR', 'XMR', 'ZEC', 'TRUMP', 'BONK', 'WIF', 'FLOKI'];
 export const COINS = {};
-for (const s of TOP) COINS[s] = { name: s, inst: s + '-USDT-SWAP', ct: 1 };
-COINS.BTC.name = 'Bitcoin'; COINS.ETH.name = 'Ethereum'; COINS.NEAR.name = 'NEAR Protocol';
 export const MAX_OPEN = 10, PICKS = 8, MAX_SPREAD_BPS = 12;
 export const decFor = (p) => (p >= 1000 ? 2 : p >= 10 ? 3 : p >= 1 ? 4 : 6);
-let instAt = 0;
-async function loadInstruments() {
-  if (Date.now() - instAt < 3600000) return;
-  const list = await okx('/api/v5/public/instruments?instType=SWAP');
-  const by = {}; for (const i of list) by[i.instId] = i;
-  for (const s of Object.keys(COINS)) {
-    const i = by[COINS[s].inst];
-    if (!i || i.state !== 'live') { delete COINS[s]; continue; }
-    COINS[s].ct = +i.ctVal * (+i.ctMult || 1) || 1;
+let instAt = 0, INST = {};
+/* Watchlist: the page appends a desk_events row (kind 'watchlist', data.list). The newest one wins. Always 50 live coins:
+   invalid or unlisted entries are replaced by the next spare from TOP. Coins with open trades stay until the trade closes. */
+async function loadInstruments(db) {
+  if (Date.now() - instAt > 3600000) {
+    const list = await okx('/api/v5/public/instruments?instType=SWAP'); INST = {};
+    for (const i of list) INST[i.instId] = i; instAt = Date.now();
   }
-  const keep = TOP.filter((x) => COINS[x]).slice(0, TOP_N);
-  for (const x of Object.keys(COINS)) if (!keep.includes(x)) delete COINS[x];
-  instAt = Date.now();
+  let want = TOP.slice();
+  if (db) {
+    try {
+      const w = await db.select('desk_events', 'select=data&kind=eq.watchlist&order=ts.desc&limit=1');
+      const l = w[0] && w[0].data && w[0].data.list;
+      if (Array.isArray(l)) want = l.map((x) => String(x).toUpperCase().replace(/[^A-Z0-9]/g, '')).filter(Boolean);
+    } catch (e) {}
+  }
+  const live = (x) => INST[x + '-USDT-SWAP'] && INST[x + '-USDT-SWAP'].state === 'live';
+  const keep = []; for (const x of want.concat(TOP)) if (!keep.includes(x) && live(x) && keep.length < TOP_N) keep.push(x);
+  let hold = [];
+  if (db) { try { hold = (await db.select('ap_positions', 'select=coin&status=eq.open')).map((p) => p.coin.split(':')[0]); } catch (e) {} }
+  for (const x of Object.keys(COINS)) delete COINS[x];
+  for (const x of keep.concat(hold)) if (!COINS[x] && live(x)) { const i = INST[x + '-USDT-SWAP']; COINS[x] = { name: x, inst: x + '-USDT-SWAP', ct: +i.ctVal * (+i.ctMult || 1) || 1 }; }
 }
 
 /* ---------- Supabase (service key, server only) ---------- */
@@ -128,6 +135,7 @@ function lastJson(text) {
 export async function newsJob(env, coin) {
   if (!env.SUPABASE_SERVICE_KEY || !env.ANTHROPIC_API_KEY) return { skipped: 'missing keys' };
   const db = sb(env.SUPABASE_SERVICE_KEY);
+  await loadInstruments(db);
   await db.select('ap_news', 'select=id&limit=1'); // fails fast if tables are missing, before spending on Claude
   const c = COINS[coin];
   const text = await claude(env.ANTHROPIC_API_KEY, {
@@ -262,7 +270,7 @@ async function scanCoin(coin, tk) {
 
 export async function scanAll(env) {
   const db = sb(env.SUPABASE_SERVICE_KEY);
-  await loadInstruments();
+  await loadInstruments(db);
   const tks = {}; for (const t of await okx('/api/v5/market/tickers?instType=SWAP')) tks[t.instId] = t;
   const coins = Object.keys(COINS).filter((s) => tks[COINS[s].inst]), rows = [];
   for (let i = 0; i < coins.length; i += 10) {
@@ -344,7 +352,7 @@ export async function tickAll(env) {
 /* Pick which coin the news job scans next: coins with an open trade or the biggest 24h move, oldest scan first. */
 export async function pickNewsCoin(env) {
   const db = sb(env.SUPABASE_SERVICE_KEY);
-  await loadInstruments();
+  await loadInstruments(db);
   const [tk, news, open] = await Promise.all([okx('/api/v5/market/tickers?instType=SWAP'), db.select('ap_news', 'select=coin,ts&order=ts.desc&limit=300'), db.select('ap_positions', 'select=coin&status=eq.open&coin=not.like.*:*')]);
   const last = {}; for (const n of news) if (!last[n.coin]) last[n.coin] = new Date(n.ts).getTime();
   const move = {}; for (const t of tk) { const s = t.instId.replace('-USDT-SWAP', ''); if (COINS[s]) move[s] = Math.abs((+t.last - +t.open24h) / +t.open24h); }

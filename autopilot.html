@@ -55,6 +55,7 @@
   <h2>Top 50 race: what $250 in each coin is worth now <span class="mut" style="text-transform:none;letter-spacing:0">· every line starts at $250 · hover a line, click to open a coin</span></h2>
   <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" id="recap">🎬 6h recap (3 min)</span><span id="recapMsg" class="mut"></span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="0">Since 18:00</span><span class="chip" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
   <div class="card" id="chart"></div>
+  <details id="wl"><summary>Manage coins <span class="mut" id="wlN"></span></summary><div id="wlBody" style="padding:8px 0"></div></details>
   <details><summary>Table view (same data)</summary><div class="scroll"><table id="tbl"></table></div></details>
   <details id="decSec" open><summary class="h2s">Latest decisions <span class="mut" id="decCount"></span></summary>
   <div style="margin-bottom:8px"><span class="chip" id="fAll">All</span><span class="chip" id="fTrade">Only trade calls</span><span class="chip" id="fOpen">Expand all</span></div>
@@ -128,7 +129,7 @@
     if (EQ.busy) return; EQ.busy = true;
     var t0 = EQ.hrs ? new Date(Date.now() - EQ.hrs * 3600000).toISOString() : RACE_START, key = EQ.hrs, have = EQ.cache[key], since = have && have.rows.length ? have.rows[have.rows.length - 1].ts : t0;
     Promise.all([getAll('ap_samples', 'select=coin,price,ts&ts=gt.' + since + '&order=ts.asc'), getAll('ap_positions', 'select=coin,side,entry_price,exit_price,notional,opened_at,closed_at,pnl,status&or=(status.eq.open,closed_at.gte.' + t0 + ')&order=opened_at.asc')]).then(function (r) {
-      var rows = (have ? have.rows : []).concat(r[0]).filter(function (x) { return x.ts >= t0; }), first = !EQ.S.length;
+      var rows = (have ? have.rows : []).concat(r[0]).filter(function (x) { return x.ts >= t0 && (!WLSET || WLSET[x.coin]); }), first = !EQ.S.length;
       EQ.cache[key] = { rows: rows }; EQ.pos = r[1]; EQ.rows = rows; EQ.busy = false; eqBuild(); if (first) EQ.prog = 0; refresh();
     }).catch(function (e) { EQ.busy = false; $('chart').innerHTML = '<span class="err">chart data: ' + esc(e.message) + '</span>'; EQ.built = false; });
   }
@@ -306,11 +307,39 @@
   }
   $('fOpen').onclick = function () { allOpen = !allOpen; openDec = {}; if (D) decisions(); }; $('fAll').onclick = function () { onlyTrades = false; if (D) decisions(); }; $('fTrade').onclick = function () { onlyTrades = true; if (D) decisions(); };
   /* refresh every 5 minutes, lined up with the server scan (which runs on the 5-minute marks) plus 40 seconds for it to finish */
+
+  /* ---- Manage coins: the watchlist is stored as a desk_events row (kind "watchlist"); the server reads the newest one every scan and always keeps 50 live coins ---- */
+  var WL = null, WLDEF = ORDER.slice(0, 50), WLSET = null;
+  function wlSet(list) { WL = list; WLSET = {}; list.forEach(function (c) { WLSET[c] = 1; }); ORDER = list.concat(ORDER.filter(function (c) { return !WLSET[c]; })); }
+  function wlLoad() {
+    return get('desk_events', 'select=data,ts&kind=eq.watchlist&order=ts.desc&limit=1').then(function (r) { wlSet(r[0] && r[0].data && r[0].data.list && r[0].data.list.length ? r[0].data.list.slice(0, 50) : WLDEF.slice()); wlDraw(); }).catch(function () { wlSet(WLDEF.slice()); wlDraw(); });
+  }
+  function wlDraw() {
+    var b = $('wlBody'); if (!b || !WL) return; $('wlN').textContent = '· ' + WL.length + ' of 50';
+    b.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">' + WL.map(function (c) { return '<span class="chip" style="border-color:' + coinCol(c) + '">' + esc(c) + ' <b class="wlx" data-c="' + esc(c) + '" style="cursor:pointer;margin-left:4px" title="remove">✕</b></span>'; }).join('') + '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input id="wlAdd" placeholder="ticker, e.g. WIF" style="width:130px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;text-transform:uppercase">' +
+      (WL.length >= 50 ? '<span class="mut">replaces</span><select id="wlRep" style="padding:6px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit">' + WL.slice().reverse().map(function (c) { return '<option>' + esc(c) + '</option>'; }).join('') + '</select>' : '') +
+      '<span class="chip on" id="wlGo">Add coin</span><span class="chip" id="wlSave">Save changes</span><span class="mut" id="wlMsg"></span></div>' +
+      '<div class="mut" style="margin-top:8px;font-size:12px">Always 50 coins. If you remove one without adding another, the next spare coin fills the slot. A coin with an open trade stays until that trade closes. Changes apply on the next 5 minute scan; a new coin starts at $250 from its first scan.</div>';
+    Array.prototype.forEach.call(b.querySelectorAll('.wlx'), function (x) { x.onclick = function () { WL = WL.filter(function (c) { return c !== x.getAttribute('data-c'); }); wlDraw(); $('wlMsg').textContent = ' unsaved'; }; });
+    $('wlGo').onclick = function () {
+      var t = ($('wlAdd').value || '').toUpperCase().replace(/[^A-Z0-9]/g, ''), m = $('wlMsg'); if (!t) return; if (WL.indexOf(t) >= 0) { m.textContent = ' already in the list'; return; }
+      m.textContent = ' checking OKX…';
+      fetch('https://www.okx.com/api/v5/public/instruments?instType=SWAP&instId=' + t + '-USDT-SWAP').then(function (r) { return r.json(); }).then(function (j) {
+        if (!j.data || !j.data.length || j.data[0].state !== 'live') { m.textContent = ' ' + t + ' is not a live OKX USDT swap'; return; }
+        var rep = $('wlRep'); if (rep) WL = WL.filter(function (c) { return c !== rep.value; }); WL = WL.concat([t]); if (ORDER.indexOf(t) < 0) ORDER.push(t); wlDraw(); $('wlMsg').textContent = ' ' + t + ' added, press Save changes';
+      }).catch(function () { m.textContent = ' could not reach OKX, try again'; });
+    };
+    $('wlSave').onclick = function () {
+      var m = $('wlMsg'); m.textContent = ' saving…';
+      fetch(URL + 'desk_events', { method: 'POST', headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ coin: '_', kind: 'watchlist', data: { list: WL } }) }).then(function (r) { if (!r.ok) throw new Error(r.status); wlSet(WL.slice()); EQ.cache = {}; EQ.S = []; m.textContent = ' saved. Applies on the next scan (within 5 min).'; eqLoad(); }).catch(function (e) { m.textContent = ' save failed: ' + e.message; });
+    };
+  }
   var nextAt = 0;
   function schedule() { var now = Date.now(); nextAt = Math.ceil((now - 40000) / 300000) * 300000 + 40000; if (nextAt - now < 20000) nextAt += 300000; }
   function refreshAll() { schedule(); load(); eqLoad(); }
   setInterval(function () { var left = Math.max(0, Math.round((nextAt - Date.now()) / 1000)), el = $('next'); if (el) el.textContent = Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2); if (left === 0) refreshAll(); }, 1000);
-  schedule(); load(); eqLoad();
+  schedule(); load(); wlLoad().then(function () { eqLoad(); });
   document.addEventListener('click', function (e) { if (e.target && e.target.id === 'refreshNow') refreshAll(); });
 })();
 </script>

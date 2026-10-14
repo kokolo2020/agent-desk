@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.16
+- Manage coins panel on the autopilot page: remove a coin, or add any live OKX USDT swap (checked against OKX first; at 50 you pick which coin it replaces). Saved as a watchlist row in desk_events, and the server reads the newest one every scan. Always exactly 50 coins (an empty slot is filled by the next spare), and a coin with an open trade stays until the trade closes.
+
 ## v1.15.1
 - Main page now has an AUTOPILOT button linking to /autopilot.html.
 
