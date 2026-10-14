@@ -11,6 +11,9 @@ Every push bumps the version. The version shows next to the title on the page, s
 - News scan: one coin every 15 minutes (BTC, coins with an open trade, or the biggest 24h movers, oldest scan first) instead of fixed BTC and NEAR jobs.
 - Autopilot page redesigned (decisions list is collapsible, one line each until opened): summary tiles, the "$250 race": an animated chart where every coin starts at $250 and the line shows what that $250 is worth over time (3h/6h/24h/3d). Switch between just holding the coin, the Algo desk and the AI desk (real value including open trades). Live leaderboard beside it, hover to spotlight a coin, click a coin to see Holding vs Algo vs AI with trade open/close markers, Replay button. Table view underneath, decisions with a confidence bar and what price did afterwards.
 
+- Race chart: every coin has its own fixed colour (lines, labels, leaderboard dots, tooltips); value text is green above $250 and red below.
+- All times on both pages are Bangkok time (UTC+7): the clock, chart axes, tooltips, activity tape and the Autopilot status line.
+
 ## v1.12
 - Tuned from the first two days of data (162 trades, -$167 net, $119 of it fees; NEAR longs -$151, NEAR shorts +$4).
 - Fade bot trades less: needs a 1.2% range (was 0.8%) and a 0.35% stretch (was 0.25%), and it no longer buys a dip when the last hour is down 0.5%+ (or shorts a bounce when it is up 0.5%+).

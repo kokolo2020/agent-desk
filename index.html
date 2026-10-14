@@ -132,7 +132,7 @@ td.r, th.r { text-align: right; }
     </div>
     <div class="pills">
       <span class="pill">TOTAL <b class="num" id="hTotal">$300.00</b></span>
-      <span class="pill clock num" id="clock">00:00 UTC</span>
+      <span class="pill clock num" id="clock">00:00 Bangkok</span>
     </div>
   </header>
 
@@ -422,7 +422,7 @@ td.r, th.r { text-align: right; }
       while (tb.children.length > 10) tb.removeChild(tb.lastChild);
       fills++;
     }
-    var hhmmss = function () { return new Date().toISOString().slice(11, 19); };
+    var hhmmss = function () { return new Date(Date.now() + 7 * 3600000).toISOString().slice(11, 19); }; /* Bangkok time */
 
     /* v1.1 limit twin: takes the same approved signal, but rests a limit order at the near side of the book.
        Fills only if price trades through it by 0.01%; unfilled after 3 min = missed. Entry and take profit pay maker fee,
@@ -826,7 +826,7 @@ td.r, th.r { text-align: right; }
       x.fillStyle = css('--muted'); x.textAlign = 'center';
       for (var t2 = 0; t2 < 5; t2++) {
         var n2 = Math.round(t2 / 4 * (candles.length - 1)), lx = clamp(n2 * st + st / 2, 18, cw - 18);
-        x.fillText(new Date(candles[n2].i).toISOString().slice(11, 16), lx, H - 8);
+        x.fillText(new Date(candles[n2].i + 7 * 3600000).toISOString().slice(11, 16), lx, H - 8);
       }
       var gw = Math.min(cw * .42, 340), gh = ch * .62, gx = cw * .08, gy = 10;
       var PP = nodePos.map(function (qq) { return [gx + qq[0] * gw, gy + qq[1] * gh]; });
@@ -892,7 +892,7 @@ td.r, th.r { text-align: right; }
     $('hTotal').textContent = usd(desks.reduce(function (a, d) { return a + d.bank(); }, 0));
   }, 1000);
   function frame(tm) {
-    $('clock').textContent = new Date().toISOString().slice(11, 16) + ' UTC';
+    $('clock').textContent = new Date(Date.now() + 7 * 3600000).toISOString().slice(11, 16) + ' Bangkok';
     desks.forEach(function (d) { d.draw(tm); }); requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
