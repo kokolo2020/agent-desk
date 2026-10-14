@@ -16,6 +16,8 @@ Every push bumps the version. The version shows next to the title on the page, s
 
 - Race chart tabs for leverage: Holding 1x, 1.5x, 2x, 3x. Value = $250 x (1 + leverage x the coin's move since the start of the window), no fees or funding; a coin that falls far enough to hit zero is shown as wiped out at $0. The Algo and AI desk tabs are labelled 5x, which is what those desks use. Opening a coin also draws the selected leverage line.
 
+- Race chart now starts at 18:00 Bangkok time on 14 Oct 2026 (new default tab "Since 18:00"; every line starts at $250 there). 3h, 6h, 24h and 3d tabs remain. To restart the race later, change `RACE_START` in `autopilot.html`.
+
 ## v1.12
 - Tuned from the first two days of data (162 trades, -$167 net, $119 of it fees; NEAR longs -$151, NEAR shorts +$4).
 - Fade bot trades less: needs a 1.2% range (was 0.8%) and a 0.35% stretch (was 0.25%), and it no longer buys a dip when the last hour is down 0.5%+ (or shorts a bounce when it is up 0.5%+).

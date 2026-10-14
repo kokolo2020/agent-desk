@@ -53,7 +53,7 @@
   <div class="sub" id="status">loading…</div>
   <div class="kpis" id="kpis"></div>
   <h2>Top 20 race: what $250 in each coin is worth now <span class="mut" style="text-transform:none;letter-spacing:0">· every line starts at $250 · hover a line, click to open a coin</span></h2>
-  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
+  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="0">Since 18:00</span><span class="chip" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
   <div class="card" id="chart"></div>
   <details><summary>Table view (same data)</summary><div class="scroll"><table id="tbl"></table></div></details>
   <details id="decSec" open><summary class="h2s">Latest decisions <span class="mut" id="decCount"></span></summary>
@@ -122,11 +122,11 @@
     Array.prototype.forEach.call($('tbl').querySelectorAll('th'), function (th) { th.onclick = function () { var k = th.getAttribute('data-k'); if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = k === 'coin' ? 1 : -1; } table(); }; });
   }
   /* ---- the $250 race: what $250 in each coin is worth over time (canvas, animated) ---- */
-  var EQ = { mode: 'hold', hrs: 6, cache: {}, S: [], busy: false, prog: 0, hov: null, pin: null, mx: null, my: null, t0: 0, raf: 0, built: false }, FEEP = 0.00055;
+  var RACE_START = '2026-10-14T11:00:00Z' /* 18:00 Bangkok, Wed 14 Oct 2026 */, EQ = { mode: 'hold', hrs: 0, cache: {}, S: [], busy: false, prog: 0, hov: null, pin: null, mx: null, my: null, t0: 0, raf: 0, built: false }, FEEP = 0.00055;
   function getAll(t, q) { var out = [], off = 0; function page() { return get(t, q + '&limit=1000&offset=' + off).then(function (r) { out = out.concat(r); if (r.length === 1000 && off < 40000) { off += 1000; return page(); } return out; }); } return page(); }
   function eqLoad() {
     if (EQ.busy) return; EQ.busy = true;
-    var t0 = new Date(Date.now() - EQ.hrs * 3600000).toISOString(), key = EQ.hrs, have = EQ.cache[key], since = have && have.rows.length ? have.rows[have.rows.length - 1].ts : t0;
+    var t0 = EQ.hrs ? new Date(Date.now() - EQ.hrs * 3600000).toISOString() : RACE_START, key = EQ.hrs, have = EQ.cache[key], since = have && have.rows.length ? have.rows[have.rows.length - 1].ts : t0;
     Promise.all([getAll('ap_samples', 'select=coin,price,ts&ts=gt.' + since + '&order=ts.asc'), getAll('ap_positions', 'select=coin,side,entry_price,exit_price,notional,opened_at,closed_at,pnl,status&or=(status.eq.open,closed_at.gte.' + t0 + ')&order=opened_at.asc')]).then(function (r) {
       var rows = (have ? have.rows : []).concat(r[0]).filter(function (x) { return x.ts >= t0; }), first = !EQ.S.length;
       EQ.cache[key] = { rows: rows }; EQ.pos = r[1]; EQ.rows = rows; EQ.busy = false; eqBuild(); if (first) EQ.prog = 0; refresh();
@@ -206,7 +206,7 @@
     if (EQ.mx != null && EQ.mx > g.L && EQ.mx < W - g.R) { c.strokeStyle = rgba(txt, 0.35); c.lineWidth = 1; c.setLineDash([3, 3]); c.beginPath(); c.moveTo(EQ.mx, g.T); c.lineTo(EQ.mx, H - g.B); c.stroke(); c.setLineDash([]); }
     EQ.g = g; return animating;
   }
-  function refresh() { if (!EQ.built) eqDom(); lb(); head(); kick(); }
+  function refresh() { if (!EQ.S.length) { EQ.built = false; $('chart').innerHTML = '<div class="mut" style="padding:20px 4px">The race starts at 18:00 Bangkok time. Lines appear once two scans (5 minutes apart) are recorded.</div>'; return; } if (!EQ.built) eqDom(); lb(); head(); kick(); }
   function kick() { if (!EQ.built) { eqDom(); lb(); head(); } if (!EQ.raf) EQ.raf = requestAnimationFrame(loop); }
   function loop(now) { EQ.raf = 0; if (!EQ.t0) EQ.t0 = now; if (EQ.prog < 1) EQ.prog = Math.min(1, EQ.prog + 0.018); var more = draw(now); if (more || EQ.prog < 1) EQ.raf = requestAnimationFrame(loop); }
   function eqDom() {
