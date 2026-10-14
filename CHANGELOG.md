@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.14.1
+- Autopilot page: 6h recap button. Replays the last 6 hours of the race over 3 minutes and records it to a video file (WebM) you can download.
+
 ## v1.14
 - Autopilot now covers the top 50 coins by market cap (OKX swaps; the list has spares so 50 stay live). Every coin gets $250 on the Algo desk and the AI desk. Claude still only looks at the 4 biggest movers per scan, so AI cost stays flat.
 - Forward-return backfill runs in parallel so the 5 minute run stays fast with 50 coins.

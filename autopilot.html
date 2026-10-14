@@ -53,7 +53,7 @@
   <div class="sub" id="status">loading…</div>
   <div class="kpis" id="kpis"></div>
   <h2>Top 50 race: what $250 in each coin is worth now <span class="mut" style="text-transform:none;letter-spacing:0">· every line starts at $250 · hover a line, click to open a coin</span></h2>
-  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="0">Since 18:00</span><span class="chip" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
+  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" id="recap">🎬 6h recap (3 min)</span><span id="recapMsg" class="mut"></span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="0">Since 18:00</span><span class="chip" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
   <div class="card" id="chart"></div>
   <details><summary>Table view (same data)</summary><div class="scroll"><table id="tbl"></table></div></details>
   <details id="decSec" open><summary class="h2s">Latest decisions <span class="mut" id="decCount"></span></summary>
@@ -172,7 +172,7 @@
     for (var v = g.lo; v <= g.hi + 1e-9; v += g.stp) { var y = g.Y(v); c.strokeStyle = v === START ? rgba(txt, 0.45) : rgba(line, 0.9); c.lineWidth = 1; c.setLineDash(v === START ? [] : [2, 4]); c.beginPath(); c.moveTo(g.L, y); c.lineTo(W - g.R, y); c.stroke(); c.setLineDash([]); c.fillStyle = mut; c.fillText('$' + v, g.L - 8, y); }
     c.textAlign = 'center'; for (var k = 0; k <= 5; k++) { var tt = g.t0 + (g.t1 - g.t0) * k / 5, d = bk(tt); c.fillStyle = mut; c.fillText((EQ.hrs > 24 ? (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + ' ' : '') + hm(tt), Math.max(g.L + 14, Math.min(W - g.R - 14, g.X(tt))), H - 10); }
     // draw-in
-    var pr = Math.min(1, EQ.prog), ease = 1 - Math.pow(1 - pr, 3), cut = g.L + ease * (W - g.L - g.R); if (pr < 1) animating = true;
+    var pr = Math.min(1, EQ.prog), ease = EQ.dur ? pr : 1 - Math.pow(1 - pr, 3), cut = g.L + ease * (W - g.L - g.R); if (pr < 1) animating = true;
     c.save(); c.beginPath(); c.rect(g.L - 2, 0, cut - g.L + (pr >= 1 ? 200 : 2), H); c.clip();
     function path(s, vals) { c.beginPath(); s.t.forEach(function (t, i) { var x = g.X(t), y = g.Y(vals[i]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); }
     var act = EQ.pin || EQ.hov;
@@ -208,7 +208,7 @@
   }
   function refresh() { if (!EQ.S.length) { EQ.built = false; $('chart').innerHTML = '<div class="mut" style="padding:20px 4px">The race starts at 18:00 Bangkok time. Lines appear once two scans (5 minutes apart) are recorded.</div>'; return; } if (!EQ.built) eqDom(); lb(); head(); kick(); }
   function kick() { if (!EQ.built) { eqDom(); lb(); head(); } if (!EQ.raf) EQ.raf = requestAnimationFrame(loop); }
-  function loop(now) { EQ.raf = 0; if (!EQ.t0) EQ.t0 = now; if (EQ.prog < 1) EQ.prog = Math.min(1, EQ.prog + 0.018); var more = draw(now); if (more || EQ.prog < 1) EQ.raf = requestAnimationFrame(loop); }
+  function loop(now) { EQ.raf = 0; if (!EQ.t0) EQ.t0 = now; if (EQ.dur) { EQ.prog = Math.min(1, (now - EQ.rs) / EQ.dur); if (EQ.prog >= 1) recapEnd(); } else if (EQ.prog < 1) EQ.prog = Math.min(1, EQ.prog + 0.018); var more = draw(now); if (more || EQ.prog < 1) EQ.raf = requestAnimationFrame(loop); }
   function eqDom() {
     $('chart').innerHTML = '<div class="eqwrap"><div class="eqmain"><div class="legend" id="eqhead"></div><div class="stage"><canvas id="cv"></canvas><div id="tip"></div></div></div><div class="eqlb" id="eqlb"></div></div>';
     EQ.built = true; var cv = $('cv'), tip = $('tip');
@@ -247,7 +247,33 @@
   function lbSel() { var el = $('eqlb'); if (!el) return; Array.prototype.forEach.call(el.querySelectorAll('.lbr'), function (r) { var c = r.getAttribute('data-c'); r.className = 'lbr' + (c === EQ.hov || c === EQ.pin ? ' on' : ''); }); }
   Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (c) { c.onclick = function () { EQ.mode = c.getAttribute('data-mode'); Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (x) { x.className = 'chip' + (x === c ? ' on' : ''); }); if (EQ.rows) { eqBuild(); EQ.prog = 0.35; refresh(); } }; });
   Array.prototype.forEach.call(document.querySelectorAll('[data-win]'), function (c) { c.onclick = function () { EQ.hrs = +c.getAttribute('data-win'); Array.prototype.forEach.call(document.querySelectorAll('[data-win]'), function (x) { x.className = 'chip' + (x === c ? ' on' : ''); }); EQ.pin = null; EQ.S = []; EQ.built = false; $('chart').innerHTML = '<div class="mut">loading…</div>'; eqLoad(); }; });
-  $('replay').onclick = function () { EQ.prog = 0; kick(); };
+  $('replay').onclick = function () { EQ.dur = 0; EQ.prog = 0; kick(); };
+  /* 6h recap: replays the last 6 hours over 3 minutes and records the chart to a video file you can download */
+  var REC = null;
+  function recapEnd() {
+    EQ.dur = 0; if (!REC) return; var r = REC; REC = null;
+    setTimeout(function () { try { r.stop(); } catch (e) {} }, 800);
+  }
+  $('recap').onclick = function () {
+    if (REC || EQ.dur) return;
+    var msg = $('recapMsg'), cv = $('cv'), chunks = [];
+    EQ.mode = 'hold'; EQ.hrs = 6; EQ.pin = null;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-win]'), function (x) { x.classList.toggle('on', x.getAttribute('data-win') === '6'); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (x) { x.classList.toggle('on', x.getAttribute('data-mode') === 'hold'); });
+    var go = function () {
+      EQ.rs = performance.now(); EQ.dur = 180000; EQ.prog = 0; EQ.t0 = 0; msg.textContent = ' recording… 3:00';
+      var tm = setInterval(function () { var l = Math.max(0, Math.round((EQ.dur ? EQ.dur - (performance.now() - EQ.rs) : 0) / 1000)); msg.textContent = ' recording… ' + Math.floor(l / 60) + ':' + ('0' + l % 60).slice(-2); if (!EQ.dur) clearInterval(tm); }, 1000);
+      try {
+        var cv2 = $('cv'), st = cv2.captureStream(30), rc = new MediaRecorder(st, { mimeType: window.MediaRecorder && MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm', videoBitsPerSecond: 4000000 });
+        rc.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        rc.onstop = function () { var url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })), d = bk(Date.now()), name = 'recap-6h-' + d.toISOString().slice(0, 16).replace(/[-:T]/g, '') + '.webm'; msg.innerHTML = ' done · <a href="' + url + '" download="' + name + '" style="color:var(--accent,#7cf)">download video (' + name + ')</a>'; };
+        rc.start(1000); REC = rc;
+      } catch (e) { msg.textContent = ' playing (this browser cannot record video)'; }
+      kick();
+    };
+    if (EQ.busy) return; load2(go);
+  };
+  function load2(cb) { var k = EQ.cache[6]; if (k) { EQ.rows = k.rows; eqBuild(); cb(); } else { eqLoad(); var n = 0, w = setInterval(function () { if (EQ.cache[6] || ++n > 60) { clearInterval(w); cb(); } }, 250); } }
   var openDec = {}, allOpen = false;
   function decisions() {
     var list = D.decs.filter(function (d) { return !onlyTrades || d.action !== 'PASS'; });
