@@ -6,8 +6,8 @@
 <meta name="version" content="ap-v1.13">
 <title>Autopilot</title>
 <style>
-  :root { --bg:#0b0f14; --card:#121922; --card2:#0f151d; --line:#1f2a37; --text:#e6edf3; --mut:#8b98a8; --up:#3ddc97; --down:#ff6b6b; --acc:#6aa9ff; --warn:#f2c14e; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
-  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f4f6f9; --card:#fff; --card2:#f8fafc; --line:#dde3ea; --text:#17202b; --mut:#5b6b7d; --up:#13875a; --down:#c93c3c; --acc:#2563c9; --warn:#a66d00; } }
+  :root { --bg:#0b0f14; --card:#121922; --card2:#0f151d; --line:#1f2a37; --text:#e6edf3; --mut:#8b98a8; --up:#3ddc97; --down:#ff6b6b; --acc:#6aa9ff; --warn:#f2c14e; --s1:#3987e5; --s2:#d95926; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f4f6f9; --card:#fff; --card2:#f8fafc; --line:#dde3ea; --text:#17202b; --mut:#5b6b7d; --up:#13875a; --down:#c93c3c; --acc:#2563c9; --warn:#a66d00; --s1:#2a78d6; --s2:#eb6834; } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
   .wrap { max-width:1100px; margin:0 auto; padding:16px; }
@@ -35,6 +35,11 @@
   .res { margin-top:4px; font-size:12px; color:var(--mut); }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; } .news { font-size:13px; } a { color:var(--acc); } .err { color:var(--down); }
   .chip { display:inline-block; border:1px solid var(--line); border-radius:99px; padding:3px 11px; font-size:12px; color:var(--mut); cursor:pointer; margin-right:6px; user-select:none; } .chip.on { color:var(--text); border-color:var(--acc); }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:6px; font-size:12px; color:var(--mut); } .legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+  #chart { position:relative; padding:12px 12px 6px; } #chart svg { width:100%; height:auto; display:block; } #chart text { fill:var(--mut); font:11px system-ui,sans-serif; } #chart text.coin { fill:var(--text); font-weight:650; font-size:12px; } #chart text.val { fill:var(--text); font:600 11px ui-monospace,Menlo,Consolas,monospace; }
+  #chart .grid { stroke:var(--line); stroke-width:1; } #chart .zero { stroke:var(--mut); stroke-width:1; } #chart .hit { fill:transparent; } #chart .hit:hover { fill:rgba(128,144,164,.10); }
+  #tip { position:absolute; pointer-events:none; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px 10px; font-size:12px; line-height:1.5; box-shadow:0 6px 20px rgba(0,0,0,.35); display:none; z-index:5; min-width:200px; }
+  details { margin-top:8px; } summary { cursor:pointer; color:var(--mut); font-size:12px; margin-bottom:8px; }
   @media (max-width:600px) { .wrap { padding:12px; } }
 </style>
 </head>
@@ -43,8 +48,9 @@
   <h1>AUTOPILOT <small>ap-v1.13 · top 20 coins · paper money · decided by Claude · runs on the server</small></h1>
   <div class="sub" id="status">loading…</div>
   <div class="kpis" id="kpis"></div>
-  <h2>Top 20: Algo desk vs AI desk, $250 each per coin <span class="mut" style="text-transform:none;letter-spacing:0">· click a column to sort</span></h2>
-  <div class="scroll"><table id="tbl"></table></div>
+  <h2>Top 20: profit and loss per coin, Algo desk vs AI desk <span class="mut" style="text-transform:none;letter-spacing:0">· $250 per desk per coin</span> <span style="float:right;text-transform:none;letter-spacing:0"><span class="chip on" data-sort="total">Best total</span><span class="chip" data-sort="edge">AI − Algo</span><span class="chip" data-sort="coin">A–Z</span></span></h2>
+  <div class="card" id="chart"></div>
+  <details><summary>Table view (same data)</summary><div class="scroll"><table id="tbl"></table></div></details>
   <h2>Latest decisions</h2>
   <div style="margin-bottom:8px"><span class="chip" id="fAll">All</span><span class="chip" id="fTrade">Only trade calls</span></div>
   <div class="card" id="decs"></div>
@@ -110,6 +116,38 @@
     $('tbl').innerHTML = h;
     Array.prototype.forEach.call($('tbl').querySelectorAll('th'), function (th) { th.onclick = function () { var k = th.getAttribute('data-k'); if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = k === 'coin' ? 1 : -1; } table(); }; });
   }
+  var csort = 'total';
+  function chart() {
+    var rows = D.rows.slice().sort(function (a, b) { return csort === 'coin' ? a.coin.localeCompare(b.coin) : csort === 'edge' ? b.edge - a.edge : (b.aiPnl + b.alPnl) - (a.aiPnl + a.alPnl); });
+    var mx = Math.max.apply(null, rows.map(function (r) { return Math.max(Math.abs(r.aiPnl), Math.abs(r.alPnl)); }).concat([0.5])), step = mx <= 1 ? 0.5 : mx <= 3 ? 1 : mx <= 8 ? 2 : mx <= 20 ? 5 : 10, M = Math.ceil(mx * 1.3 / step) * step;
+    var W = 1000, L = 64, R = 130, T = 8, rh = 30, bh = 9, gap = 2, iw = W - L - R, H = T + rows.length * rh + 26, X = function (v) { return L + (v + M) / (2 * M) * iw; }, h = '';
+    for (var g = -M; g <= M + 1e-9; g += step) { h += '<line class="' + (Math.abs(g) < 1e-9 ? 'zero' : 'grid') + '" x1="' + X(g) + '" x2="' + X(g) + '" y1="' + T + '" y2="' + (H - 22) + '"/><text x="' + X(g) + '" y="' + (H - 6) + '" text-anchor="middle">' + (g < 0 ? '-' : g > 0 ? '+' : '') + '$' + Math.abs(+g.toFixed(2)) + '</text>'; }
+    rows.forEach(function (r, i) {
+      var y = T + i * rh, cy = y + rh / 2;
+      h += '<text class="coin" x="' + (L - 10) + '" y="' + (cy + 4) + '" text-anchor="end">' + esc(r.coin) + '</text>';
+      [[r.alPnl, 'var(--s1)', -bh - gap / 2], [r.aiPnl, 'var(--s2)', gap / 2]].forEach(function (b) {
+        var v = b[0], x0 = X(0), x1 = X(v), w = Math.abs(x1 - x0), by = cy + b[2];
+        if (w > 0.5) { var rr = Math.min(4, w); h += '<path fill="' + b[1] + '" d="' + (v >= 0 ? 'M' + x0 + ' ' + by + 'h' + (w - rr) + 'a' + rr + ' ' + rr + ' 0 0 1 ' + rr + ' ' + rr + 'v' + (bh - 2 * rr) + 'a' + rr + ' ' + rr + ' 0 0 1 -' + rr + ' ' + rr + 'h-' + (w - rr) + 'z' : 'M' + x0 + ' ' + by + 'h-' + (w - rr) + 'a' + rr + ' ' + rr + ' 0 0 0 -' + rr + ' ' + rr + 'v' + (bh - 2 * rr) + 'a' + rr + ' ' + rr + ' 0 0 0 ' + rr + ' ' + rr + 'h' + (w - rr) + 'z') + '"/>';
+          h += '<text class="val" x="' + (v >= 0 ? x1 + 5 : x1 - 5) + '" y="' + (by + bh - 1) + '" text-anchor="' + (v >= 0 ? 'start' : 'end') + '">' + money(v) + '</text>'; }
+      });
+      var ob = [r.al.open ? 'Algo ' + r.al.open.side.toLowerCase() : '', r.ai.open ? 'AI ' + r.ai.open.side.toLowerCase() : ''].filter(Boolean).join(' · ');
+      h += '<text x="' + (W - 6) + '" y="' + (cy + 4) + '" text-anchor="end">' + (ob ? esc(ob) + ' open' : '') + '</text>';
+      h += '<rect class="hit" data-i="' + i + '" x="0" y="' + y + '" width="' + W + '" height="' + rh + '"/>';
+    });
+    var any = rows.some(function (r) { return r.ai.trades + r.al.trades > 0; });
+    $('chart').innerHTML = '<div class="legend"><span><i style="background:var(--s1)"></i>Algo desk (rules)</span><span><i style="background:var(--s2)"></i>AI desk (Claude)</span><span>bars: closed-trade P&amp;L per coin · right: open trades</span></div>' +
+      (any ? '' : '<div class="mut" style="font-size:12px;margin:2px 0 6px">No closed trades yet, so no bars. They appear as trades close.</div>') + '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Profit and loss per coin, Algo desk versus AI desk">' + h + '</svg>' + '<div id="tip"></div>';
+    var tip = $('tip'), box = $('chart');
+    Array.prototype.forEach.call(box.querySelectorAll('.hit'), function (el) {
+      el.onmousemove = function (e) {
+        var r = rows[+el.getAttribute('data-i')], b = box.getBoundingClientRect(), d2 = function (s) { return s.trades + ' trades (' + s.w + 'W ' + s.l + 'L)'; };
+        tip.innerHTML = '<b>' + esc(r.coin) + '</b> <span class="mut">' + (r.price == null ? '' : px(r.price) + ' · 24h ' + pct(r.ch24, 1) + ' · 60m ' + pct(r.r60)) + '</span><br><span style="color:var(--s1)">■</span> Algo <b class="' + cls(r.alPnl) + '">' + money(r.alPnl) + '</b> <span class="mut">' + d2(r.al) + '</span><br><span style="color:var(--s2)">■</span> AI <b class="' + cls(r.aiPnl) + '">' + money(r.aiPnl) + '</b> <span class="mut">' + d2(r.ai) + '</span>' + (r.last ? '<br><span class="mut">latest AI call: ' + esc(r.last.action) + ' ' + (+r.last.confidence).toFixed(2) + ' · ' + ago(r.last.ts) + '</span>' : '');
+        tip.style.display = 'block'; var tx = e.clientX - b.left + 14; if (tx + 230 > b.width) tx = e.clientX - b.left - 240; tip.style.left = Math.max(4, tx) + 'px'; tip.style.top = (e.clientY - b.top + 14) + 'px';
+      };
+      el.onmouseleave = function () { tip.style.display = 'none'; };
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (c) { c.onclick = function () { csort = c.getAttribute('data-sort'); Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (x) { x.className = 'chip' + (x === c ? ' on' : ''); }); if (D) chart(); }; });
   function decisions() {
     var list = D.decs.filter(function (d) { return !onlyTrades || d.action !== 'PASS'; });
     $('fAll').className = 'chip' + (onlyTrades ? '' : ' on'); $('fTrade').className = 'chip' + (onlyTrades ? ' on' : '');
@@ -130,7 +168,7 @@
       return '<div class="card news"><div class="row"><b>' + esc(n.coin) + '</b><span class="pill">' + esc(n.sentiment) + ' · ' + (+n.strength).toFixed(2) + '</span></div><div><b>' + esc(n.catalyst) + '</b></div><div>' + esc(n.summary) + '</div><div class="mut">' + ago(n.ts) + ' ' + src + '</div></div>';
     }).join('') : '<div class="card mut">No news scan yet (one coin every 15 minutes).</div>';
   }
-  function paint() { kpis(); table(); decisions(); newsCards(); }
+  function paint() { kpis(); chart(); table(); decisions(); newsCards(); }
   function load() {
     Promise.all([get('ap_positions', 'select=*&order=opened_at.desc&limit=1000'), get('ap_decisions', 'select=*&order=ts.desc&limit=40'), get('ap_news', 'select=*&order=ts.desc&limit=9'), get('ap_samples', 'select=coin,price,ret_60m,change24h,ts&order=ts.desc&limit=60')]).then(function (r) {
       build(r); paint();
