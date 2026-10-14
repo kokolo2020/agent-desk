@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.18
+- Maker desk (limit orders): reads the same Claude calls as the Aggressive desk (gate 50%, max 10 open, top 8 movers) but enters with a limit order 0.10% better than the price (below for longs, above for shorts). The order fills only if price trades through it by 0.02%; otherwise it is cancelled after 10 minutes and counted as a miss. Fees: 0.02% maker on entry and on take profit, 0.055% taker on stop and time exits. Stored as coin `XXX:m` with status `pending` / `cancelled`. The page shows the fill rate in the desk table and has a Maker button in the AI desk mode switch.
+
 ## v1.17.1
 - Autopilot page shows total value per desk (the $250 per coin plus closed P&L plus what open trades are worth now, minus the entry fee), with open P&L and % change, in the desk table and two new tiles. All desk numbers now count trades since 18:00 Bangkok only.
 

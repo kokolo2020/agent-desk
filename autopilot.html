@@ -53,7 +53,7 @@
   <div class="sub" id="status">loading…</div>
   <div class="kpis" id="kpis"></div>
   <div class="card" id="cmp" style="margin-bottom:10px"></div>
-  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="mut">AI desk mode:</span><span class="chip" data-aim=":n">Normal</span><span class="chip on" data-aim="">Aggressive</span><span class="chip" data-aim=":s">Super</span><span class="chip" data-aim=":u">Ultra</span></div>
+  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="mut">AI desk mode:</span><span class="chip" data-aim=":n">Normal</span><span class="chip on" data-aim="">Aggressive</span><span class="chip" data-aim=":s">Super</span><span class="chip" data-aim=":u">Ultra</span><span class="chip" data-aim=":m">Maker (limit orders)</span></div>
   <h2>Top 50 race: what $250 in each coin is worth now <span class="mut" style="text-transform:none;letter-spacing:0">· every line starts at $250 · hover a line, click to open a coin</span></h2>
   <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" id="recap">🎬 6h recap (3 min)</span><span id="recapMsg" class="mut"></span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="0">Since 18:00</span><span class="chip" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
   <div class="card" id="chart"></div>
@@ -89,7 +89,7 @@
     });
     D = { rows: rows, decs: decs, news: news, pos: pos, latest: latest };
   }
-  var AIM = '', AIN = { '': 'Aggressive', ':n': 'Normal', ':s': 'Super', ':u': 'Ultra' }, AICAP = { '': 10, ':n': 5, ':s': 15, ':u': 25 };
+  var AIM = '', AIN = { '': 'Aggressive', ':n': 'Normal', ':s': 'Super', ':u': 'Ultra', ':m': 'Maker' }, AICAP = { '': 10, ':n': 5, ':s': 15, ':u': 25, ':m': 10 };
   function inAI(c) { return AIM === '' ? c.indexOf(':') < 0 : c.slice(-2) === AIM; }
   /* total value of a desk = $250 per coin + closed P&L + what its open trades are worth right now (minus the entry fee, same as the chart) */
   function worth(test) {
@@ -102,8 +102,9 @@
     return { base: base, real: real, unr: unr, total: base + real + unr, pct: base ? (real + unr) / base * 100 : 0 };
   }
   function PS() { return D.pos.filter(function (p) { return p.opened_at >= RACE_START; }); }
+  function fillRate() { var l = PS().filter(function (p) { return p.coin.slice(-2) === ':m'; }), f = l.filter(function (p) { return p.status === 'open' || p.status === 'closed'; }).length, c = l.filter(function (p) { return p.status === 'cancelled'; }).length; return f + c ? Math.round(f / (f + c) * 100) + '% (' + f + ' filled, ' + c + ' missed, ' + l.filter(function (p) { return p.status === 'pending'; }).length + ' waiting)' : 'no orders yet'; }
   function cmpTable() {
-    var rowsH = [[':n', 'Normal', 'gate 55% · max 5 open · top 4 movers'], ['', 'Aggressive', 'gate 50% · max 10 open · top 8'], [':s', 'Super', 'gate 45% · max 15 open · top 12'], [':u', 'Ultra', 'gate 40% · max 25 open · top 16']].map(function (m) {
+    var rowsH = [[':n', 'Normal', 'gate 55% · max 5 open · top 4 movers'], ['', 'Aggressive', 'gate 50% · max 10 open · top 8'], [':s', 'Super', 'gate 45% · max 15 open · top 12'], [':u', 'Ultra', 'gate 40% · max 25 open · top 16'], [':m', 'Maker', 'limit orders 0.10% better, fee 0.02% · fill rate ' + fillRate()]].map(function (m) {
       var k = m[0], a = stats(PS().filter(function (p) { return k === '' ? p.coin.indexOf(':') < 0 : p.coin.slice(-2) === k; })), op = PS().filter(function (p) { return p.status === 'open' && (k === '' ? p.coin.indexOf(':') < 0 : p.coin.slice(-2) === k); }).length, w = worth(function (c) { return k === '' ? c.indexOf(':') < 0 : c.slice(-2) === k; });
       return '<tr><td><b>' + m[1] + '</b> <span class="mut">' + m[2] + '</span></td><td class="num">' + a.trades + '</td><td class="num">' + (a.trades ? Math.round(a.w / a.trades * 100) + '%' : '–') + '</td><td class="num ' + cls(a.pnl) + '">' + money(a.pnl) + '</td><td class="num">$' + a.fees.toFixed(2) + '</td><td class="num">' + op + '</td><td class="num ' + cls(w.unr) + '">' + money(w.unr) + '</td><td class="num"><b>$' + w.total.toFixed(2) + '</b> <span class="' + cls(w.pct) + '">' + (w.pct >= 0 ? '+' : '') + w.pct.toFixed(2) + '%</span></td></tr>';
     }).join('');
