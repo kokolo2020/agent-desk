@@ -53,7 +53,7 @@
   <div class="sub" id="status">loading…</div>
   <div class="kpis" id="kpis"></div>
   <h2>Top 20 race: what $250 in each coin is worth now <span class="mut" style="text-transform:none;letter-spacing:0">· every line starts at $250 · hover a line, click to open a coin</span></h2>
-  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Just holding the coin</span><span class="chip" data-mode="al">Algo desk</span><span class="chip" data-mode="ai">AI desk</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
+  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="chip on" data-mode="hold">Holding 1x</span><span class="chip" data-mode="h15">1.5x</span><span class="chip" data-mode="h2">2x</span><span class="chip" data-mode="h3">3x</span><span class="chip" data-mode="al">Algo desk (5x)</span><span class="chip" data-mode="ai">AI desk (5x)</span><span style="flex:1"></span><span class="chip" id="replay">▶ Replay</span><span class="chip" data-win="3">3h</span><span class="chip on" data-win="6">6h</span><span class="chip" data-win="24">24h</span><span class="chip" data-win="72">3d</span></div>
   <div class="card" id="chart"></div>
   <details><summary>Table view (same data)</summary><div class="scroll"><table id="tbl"></table></div></details>
   <details id="decSec" open><summary class="h2s">Latest decisions <span class="mut" id="decCount"></span></summary>
@@ -136,9 +136,10 @@
     var by = {}; EQ.rows.forEach(function (x) { (by[x.coin] = by[x.coin] || []).push({ t: new Date(x.ts).getTime(), p: +x.price }); });
     var posBy = {}; (EQ.pos || []).filter(function (p) { return isFinite(+p.notional) && isFinite(+p.entry_price) && p.opened_at; }).forEach(function (p) { posBy[p.coin] = posBy[p.coin] || []; posBy[p.coin].push({ dir: p.side === 'LONG' ? 1 : -1, n: +p.notional, e: +p.entry_price, x: p.exit_price == null ? null : +p.exit_price, o: new Date(p.opened_at).getTime(), c: p.closed_at ? new Date(p.closed_at).getTime() : Infinity, pnl: +p.pnl || 0 }); });
     function eq(list, pts) { var e = pts.map(function (q) { var v = 0; list.forEach(function (p) { if (p.c <= q.t) v += p.pnl; else if (p.o <= q.t) v += p.n * p.dir * (q.p - p.e) / p.e - p.n * FEEP; }); return v; }); return e.map(function (v) { return START + v - e[0]; }); }
+    function lev(pts, L) { var dead = false; return pts.map(function (q) { if (dead) return 0; var v = START * (1 + L * (q.p / pts[0].p - 1)); if (v <= 0) { dead = true; return 0; } return v; }); }
     EQ.S = Object.keys(by).map(function (coin) {
       var pts = by[coin]; if (pts.length < 2) return null;
-      return { coin: coin, t: pts.map(function (q) { return q.t; }), price: pts.map(function (q) { return q.p; }), hold: pts.map(function (q) { return START * q.p / pts[0].p; }), al: eq(posBy[coin + ':algo'] || [], pts), ai: eq(posBy[coin] || [], pts), trades: { al: posBy[coin + ':algo'] || [], ai: posBy[coin] || [] } };
+      return { coin: coin, t: pts.map(function (q) { return q.t; }), price: pts.map(function (q) { return q.p; }), hold: pts.map(function (q) { return START * q.p / pts[0].p; }), h15: lev(pts, 1.5), h2: lev(pts, 2), h3: lev(pts, 3), al: eq(posBy[coin + ':algo'] || [], pts), ai: eq(posBy[coin] || [], pts), trades: { al: posBy[coin + ':algo'] || [], ai: posBy[coin] || [] } };
     }).filter(Boolean);
     EQ.S.forEach(function (s) { s.v = s[EQ.mode]; s.end = s.v[s.v.length - 1]; });
   }
@@ -151,7 +152,7 @@
   function coinCol(coin) { var i = ORDER.indexOf(coin); if (i < 0) i = ORDER.length + (coin.charCodeAt(0) % 7); var h = Math.round((i * 137.508 + 12) % 360), l = (isDark() ? [64, 54, 72] : [44, 36, 50])[i % 3]; return 'hsl(' + h + ',' + (isDark() ? 82 : 72) + '%,' + l + '%)'; }
   var STARS = []; for (var si = 0; si < 90; si++) STARS.push([Math.random(), Math.random(), Math.random() * 1.2 + 0.2, Math.random() * 6.28]);
   function geom() {
-    var S = EQ.pin ? EQ.S.filter(function (s) { return s.coin === EQ.pin; }) : EQ.S, keys = EQ.pin ? ['hold', 'al', 'ai'] : [null];
+    var S = EQ.pin ? EQ.S.filter(function (s) { return s.coin === EQ.pin; }) : EQ.S, keys = EQ.pin ? ['hold', 'al', 'ai'].concat({ h15: 1, h2: 1, h3: 1 }[EQ.mode] ? [EQ.mode] : []) : [null];
     var t0 = 1e18, t1 = 0, lo = START, hi = START;
     S.forEach(function (s) { t0 = Math.min(t0, s.t[0]); t1 = Math.max(t1, s.t[s.t.length - 1]); keys.forEach(function (k) { (k ? s[k] : s.v).forEach(function (v) { lo = Math.min(lo, v); hi = Math.max(hi, v); }); }); });
     var span = Math.max(hi - lo, 4), stp = span <= 8 ? 2 : span <= 20 ? 5 : span <= 50 ? 10 : 25; lo = Math.floor((lo - span * 0.06) / stp) * stp; hi = Math.ceil((hi + span * 0.06) / stp) * stp;
@@ -176,7 +177,7 @@
     function path(s, vals) { c.beginPath(); s.t.forEach(function (t, i) { var x = g.X(t), y = g.Y(vals[i]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); }
     var act = EQ.pin || EQ.hov;
     if (EQ.pin) {
-      var s = g.S[0], defs = [['hold', 'Holding the coin', mut, [6, 5]], ['al', 'Algo desk', s1, []], ['ai', 'AI desk', s2, []]];
+      var s = g.S[0], defs = [['hold', 'Holding the coin', mut, [6, 5]], ['al', 'Algo desk', s1, []], ['ai', 'AI desk', s2, []]]; if ({ h15: 1, h2: 1, h3: 1 }[EQ.mode]) defs.splice(1, 0, [EQ.mode, 'Holding ' + ({ h15: '1.5x', h2: '2x', h3: '3x' })[EQ.mode], css('--warn'), [2, 3]]);
       defs.forEach(function (df) {
         var vals = s[df[0]]; c.save(); c.shadowColor = df[2]; c.shadowBlur = df[0] === 'hold' ? 0 : 14; c.strokeStyle = df[2]; c.lineWidth = df[0] === 'hold' ? 1.6 : 2.6; c.setLineDash(df[3]); c.lineJoin = 'round'; path(s, vals); c.stroke(); c.restore();
         var gr = c.createLinearGradient(0, g.Y(Math.max.apply(null, vals)), 0, g.Y(START)); if (df[0] !== 'hold') { c.save(); path(s, vals); c.lineTo(g.X(s.t[s.t.length - 1]), g.Y(START)); c.lineTo(g.X(s.t[0]), g.Y(START)); c.closePath(); gr.addColorStop(0, rgba(df[2], 0.18)); gr.addColorStop(1, rgba(df[2], 0)); c.fillStyle = gr; c.fill(); c.restore(); }
@@ -214,7 +215,7 @@
     function pos(e) { var r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, r: r }; }
     cv.addEventListener('pointermove', function (e) {
       var q = pos(e), g = EQ.g; if (!g) return; EQ.mx = q.x; EQ.my = q.y; var t = g.t0 + (q.x - g.L) / Math.max(g.W - g.L - g.R, 1) * (g.t1 - g.t0); t = Math.max(g.t0, Math.min(g.t1, t));
-      if (EQ.pin) { var s = g.S[0], rows = [['Holding the coin', interp(s, 'hold', t), css('--mut')], ['Algo desk', interp(s, 'al', t), css('--s1')], ['AI desk', interp(s, 'ai', t), css('--s2')]], dt = new Date(t);
+      if (EQ.pin) { var s = g.S[0], rows = [['Holding the coin', interp(s, 'hold', t), css('--mut')]].concat({ h15: 1, h2: 1, h3: 1 }[EQ.mode] ? [['Holding ' + ({ h15: '1.5x', h2: '2x', h3: '3x' })[EQ.mode], interp(s, EQ.mode, t), css('--warn')]] : []).concat([['Algo desk', interp(s, 'al', t), css('--s1')], ['AI desk', interp(s, 'ai', t), css('--s2')]]), dt = new Date(t);
         tip.innerHTML = '<div class="mut" style="margin-bottom:4px"><b style="color:var(--text)">' + esc(s.coin) + '</b> · ' + hm(t) + ' Bangkok</div>' + rows.map(function (r) { return '<div class="trow"><span><span style="color:' + r[2] + '">■</span> ' + r[0] + '</span><span class="mono ' + cls(r[1] - START) + '">$' + r[1].toFixed(2) + ' (' + pct((r[1] - START) / START * 100, 1) + ')</span></div>'; }).join('');
       } else {
         var best = null, bd = 1e9, list = g.S.map(function (s) { var v = interp(s, null, t), d2 = Math.abs(g.Y(v) - q.y); if (d2 < bd) { bd = d2; best = s; } return { c: s.coin, v: v }; });
@@ -232,9 +233,9 @@
   function unpin() { EQ.pin = null; EQ.prog = 0.55; head(); lbSel(); kick(); }
   function head() {
     var S = EQ.S, h = $('eqhead'); if (!h) return;
-    if (EQ.pin) { var s = S.filter(function (x) { return x.coin === EQ.pin; })[0]; if (!s) { EQ.pin = null; return head(); } var f = function (k) { var v = s[k][s[k].length - 1]; return '<span>' + ({ hold: 'Holding', al: 'Algo desk', ai: 'AI desk' })[k] + ' <b class="' + cls(v - START) + '">$' + v.toFixed(2) + '</b></span>'; };
-      h.innerHTML = '<b style="color:' + coinCol(s.coin) + ';font-size:14px">' + esc(s.coin) + '</b>' + f('hold') + '<span style="color:var(--s1)">■ Algo</span><span style="color:var(--s2)">■ AI</span><span>▲ long ▼ short opened · ● closed</span><span class="chip" id="unpin">✕ all coins</span>'; $('unpin').onclick = unpin; return; }
-    var tot = S.reduce(function (a, s) { return a + s.end; }, 0), base = START * S.length, upn = S.filter(function (s) { return s.end >= START; }).length, lbl = EQ.mode === 'hold' ? 'Just holding each coin (no trading)' : EQ.mode === 'al' ? 'Algo desk (rules), real value incl. open trades' : 'AI desk (Claude), real value incl. open trades';
+    if (EQ.pin) { var s = S.filter(function (x) { return x.coin === EQ.pin; })[0]; if (!s) { EQ.pin = null; return head(); } var f = function (k) { var v = s[k][s[k].length - 1]; return '<span>' + ({ hold: 'Holding', h15: 'Holding 1.5x', h2: 'Holding 2x', h3: 'Holding 3x', al: 'Algo desk', ai: 'AI desk' })[k] + ' <b class="' + cls(v - START) + '">$' + v.toFixed(2) + '</b></span>'; };
+      h.innerHTML = '<b style="color:' + coinCol(s.coin) + ';font-size:14px">' + esc(s.coin) + '</b>' + f('hold') + ({ h15: 1, h2: 1, h3: 1 }[EQ.mode] ? f(EQ.mode) : '') + '<span style="color:var(--s1)">■ Algo</span><span style="color:var(--s2)">■ AI</span><span>▲ long ▼ short opened · ● closed</span><span class="chip" id="unpin">✕ all coins</span>'; $('unpin').onclick = unpin; return; }
+    var tot = S.reduce(function (a, s) { return a + s.end; }, 0), base = START * S.length, upn = S.filter(function (s) { return s.end >= START; }).length, wiped = S.filter(function (s) { return s.end <= 0; }).length, LV = { h15: '1.5x', h2: '2x', h3: '3x' }, lbl = EQ.mode === 'hold' ? 'Just holding each coin (1x, no trading)' : LV[EQ.mode] ? 'Holding each coin at ' + LV[EQ.mode] + ' leverage (no trading' + (wiped ? ', ' + wiped + ' wiped out' : '') + ')' : EQ.mode === 'al' ? 'Algo desk (rules), real value incl. open trades' : 'AI desk (Claude), real value incl. open trades';
     h.innerHTML = '<b style="color:var(--text)">' + lbl + '</b><span>' + S.length + ' coins · $' + tot.toFixed(0) + ' of $' + base + ' (<span class="' + cls(tot - base) + '">' + pct((tot - base) / base * 100) + '</span>)</span><span>' + upn + ' above · ' + (S.length - upn) + ' below $' + START + '</span>';
   }
   function lb() {
