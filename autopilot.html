@@ -123,7 +123,7 @@
       cell('Total value · ' + AIN[AIM] + ' AI', '$' + wk.total.toFixed(0), (wk.pct >= 0 ? '+' : '') + wk.pct.toFixed(2) + '% · realized ' + money(wk.real) + ' · open ' + money(wk.unr), cls(wk.pct)) +
       cell('Total value · Algo', '$' + wz.total.toFixed(0), (wz.pct >= 0 ? '+' : '') + wz.pct.toFixed(2) + '% · realized ' + money(wz.real) + ' · open ' + money(wz.unr), cls(wz.pct)) +
       cell('Leader', ai.pnl === al.pnl ? 'tie' : ai.pnl > al.pnl ? 'AI' : 'Algo', 'by ' + money(Math.abs(ai.pnl - al.pnl)) + ' so far') +
-      cell('Bank per desk', '$' + START, nc + ' coins × 5 desks × $' + START + ' = $' + (nc * 5 * START)) +
+      cell('Bank per desk', '$' + START, nc + ' coins × 6 desks × $' + START + ' = $' + (nc * 6 * START)) +
       cell('Open now', PS().filter(function (p) { return p.status === 'open'; }).length, PS().filter(function (p) { return p.status === 'open' && /:algo$/.test(p.coin); }).length + ' algo · ' + PS().filter(function (p) { return p.status === 'open' && inAI(p.coin); }).length + ' ' + AIN[AIM] + ' AI (cap ' + AICAP[AIM] + ')') +
       cell('Market (60m)', lat.length ? up + ' up · ' + (lat.length - up) + ' down' : '–', 'breadth of ' + lat.length + ' coins');
   }
