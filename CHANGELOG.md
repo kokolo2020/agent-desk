@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.14.2
+- Automatic 6h recap video: a GitHub Action runs at 00:05, 06:05, 12:05 and 18:05 Bangkok time, records the 3 minute recap of the live page and posts it as an MP4 on the repo's Releases page.
+
 ## v1.14.1
 - Autopilot page: 6h recap button. Replays the last 6 hours of the race over 3 minutes and records it to a video file (WebM) you can download.
 

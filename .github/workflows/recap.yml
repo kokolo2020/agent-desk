@@ -1,0 +1,27 @@
+name: 6h recap video
+on:
+  schedule:
+    - cron: '5 17,23,5,11 * * *'   # 00:05, 06:05, 12:05, 18:05 Bangkok time
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  recap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm i --no-save playwright && npx playwright install --with-deps chromium
+      - run: node scripts/recap.mjs
+      - name: Make mp4
+        run: |
+          f=$(ls rec/*.webm | head -1)
+          ffmpeg -y -i "$f" -ss 2 -c:v libx264 -pix_fmt yuv420p -crf 23 recap.mp4
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="recap-$(TZ=Asia/Bangkok date +%Y%m%d-%H%M)"
+          gh release create "$tag" recap.mp4 --title "6h recap $(TZ=Asia/Bangkok date '+%d %b %H:%M') Bangkok" --notes "Last 6 hours of the Top 50 \$250 race."

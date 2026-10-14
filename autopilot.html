@@ -273,6 +273,7 @@
     };
     if (EQ.busy) return; load2(go);
   };
+  if (/[?&]recap=auto/.test(location.search)) setTimeout(function () { $('recap').click(); }, 6000);
   function load2(cb) { var k = EQ.cache[6]; if (k) { EQ.rows = k.rows; eqBuild(); cb(); } else { eqLoad(); var n = 0, w = setInterval(function () { if (EQ.cache[6] || ++n > 60) { clearInterval(w); cb(); } }, 250); } }
   var openDec = {}, allOpen = false;
   function decisions() {
