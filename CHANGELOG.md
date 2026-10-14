@@ -2,6 +2,15 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.13
+- Autopilot now covers the top 20 coins (BTC, ETH, XRP, BNB, SOL, DOGE, TRX, ADA, LINK, AVAX, SUI, XLM, BCH, HBAR, LTC, TON, DOT, UNI, AAVE, NEAR). Contract sizes come from OKX at run time, and a coin OKX does not list is dropped.
+- Every 5 minutes it scans all of them (one snapshot row each for pattern mining), then asks Claude only about the 4 coins whose move is biggest compared with their own noise, plus any coin with an open trade. At most 5 AI trades open at once; skips a coin when the spread is over 8 bps.
+- New Algo desk: plain rules, no AI, $250 per coin, stored as coin `XXX:algo` in `ap_positions` (no new table needed). Rule: range fade (30m range 1.2%+, price 0.35%+ from its 20m average, not trending, price has turned, not fighting a 60m move of 0.5%+), take profit 0.6%, stop 0.6%, 30 minute hold, 10 minute cooldown.
+- Both desks start at $250 per coin (was $150 for the AI desk), so the Autopilot page compares them side by side with a total and an "AI minus Algo" column.
+- AI thinking upgrade: it now sees market breadth across the top 20, BTC's trend, how the coin moves against BTC, and the desk's recent win/loss by side. The prompt makes it reason in order (regime, edge, catalyst, cost, track record), defines confidence as the chance of hitting take profit first, raises the minimum take profit to 0.5%, and tells it a rule-based desk is being compared with it. Reasons are stored up to 340 characters.
+- News scan: one coin every 15 minutes (BTC, coins with an open trade, or the biggest 24h movers, oldest scan first) instead of fixed BTC and NEAR jobs.
+- Autopilot page redesigned: summary tiles, sortable top-20 table, decisions with a confidence bar and what price did afterwards.
+
 ## v1.12
 - Tuned from the first two days of data (162 trades, -$167 net, $119 of it fees; NEAR longs -$151, NEAR shorts +$4).
 - Fade bot trades less: needs a 1.2% range (was 0.8%) and a 0.35% stretch (was 0.25%), and it no longer buys a dip when the last hour is down 0.5%+ (or shorts a bounce when it is up 0.5%+).

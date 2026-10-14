@@ -3,34 +3,51 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="version" content="ap-v1.0">
+<meta name="version" content="ap-v1.13">
 <title>Autopilot</title>
 <style>
-  :root { --bg:#0b0f14; --card:#121922; --line:#1f2a37; --text:#e6edf3; --mut:#8b98a8; --up:#3ddc97; --down:#ff6b6b; --acc:#6aa9ff; }
-  :root:not([data-theme="dark"]) { }
-  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f4f6f9; --card:#fff; --line:#dde3ea; --text:#17202b; --mut:#5b6b7d; --up:#13875a; --down:#c93c3c; --acc:#2563c9; } }
+  :root { --bg:#0b0f14; --card:#121922; --card2:#0f151d; --line:#1f2a37; --text:#e6edf3; --mut:#8b98a8; --up:#3ddc97; --down:#ff6b6b; --acc:#6aa9ff; --warn:#f2c14e; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --bg:#f4f6f9; --card:#fff; --card2:#f8fafc; --line:#dde3ea; --text:#17202b; --mut:#5b6b7d; --up:#13875a; --down:#c93c3c; --acc:#2563c9; --warn:#a66d00; } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-  .wrap { max-width:980px; margin:0 auto; padding:16px; }
-  h1 { font-size:18px; margin:0 0 4px; } h1 small { color:var(--mut); font-weight:500; font-size:12px; }
+  .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; letter-spacing:.04em; } h1 small { color:var(--mut); font-weight:500; font-size:12px; letter-spacing:0; }
+  h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--mut); margin:22px 0 8px; font-weight:600; }
   .sub { color:var(--mut); font-size:12px; margin-bottom:14px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+  .kpi { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; }
+  .kpi .l { color:var(--mut); font-size:11px; letter-spacing:.06em; text-transform:uppercase; } .kpi .v { font:650 22px var(--mono); margin-top:2px; } .kpi .n { color:var(--mut); font-size:11px; margin-top:2px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
-  .row { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
-  .big { font-size:26px; font-weight:650; } .mut { color:var(--mut); } .up { color:var(--up); } .down { color:var(--down); }
+  .mut { color:var(--mut); } .up { color:var(--up); } .down { color:var(--down); } .mono { font-family:var(--mono); }
   .pill { display:inline-block; padding:1px 8px; border-radius:99px; border:1px solid var(--line); font-size:11px; color:var(--mut); }
-  h2 { font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--mut); margin:18px 0 8px; }
-  .dec { border-top:1px solid var(--line); padding:9px 0; } .dec:first-child { border-top:0; }
-  .news { font-size:13px; } a { color:var(--acc); }
-  .err { color:var(--down); }
+  .pill.LONG { color:var(--up); border-color:var(--up); } .pill.SHORT { color:var(--down); border-color:var(--down); } .pill.PASS { color:var(--mut); }
+  .row { display:flex; justify-content:space-between; gap:8px; align-items:baseline; flex-wrap:wrap; }
+  .scroll { overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--card); }
+  table { border-collapse:collapse; width:100%; min-width:1020px; font-size:13px; }
+  th, td { padding:8px 10px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; } th { color:var(--mut); font-weight:600; font-size:11px; letter-spacing:.05em; text-transform:uppercase; cursor:pointer; user-select:none; position:sticky; top:0; background:var(--card); }
+  th.on { color:var(--text); } tr:last-child td { border-bottom:0; } td.coin { font-weight:650; }
+  .bar { position:relative; height:6px; border-radius:3px; background:var(--card2); min-width:80px; display:inline-block; vertical-align:middle; }
+  .bar i { position:absolute; top:0; bottom:0; border-radius:3px; } .bar b { position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--line); }
+  .dec { border-top:1px solid var(--line); padding:11px 0; } .dec:first-child { border-top:0; padding-top:2px; }
+  .conf { display:inline-block; width:46px; height:5px; border-radius:3px; background:var(--card2); vertical-align:middle; margin:0 6px 0 2px; overflow:hidden; } .conf i { display:block; height:100%; background:var(--acc); }
+  .think { margin-top:4px; } .tag { color:var(--mut); font-size:11px; letter-spacing:.05em; text-transform:uppercase; margin-right:4px; }
+  .res { margin-top:4px; font-size:12px; color:var(--mut); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; } .news { font-size:13px; } a { color:var(--acc); } .err { color:var(--down); }
+  .chip { display:inline-block; border:1px solid var(--line); border-radius:99px; padding:3px 11px; font-size:12px; color:var(--mut); cursor:pointer; margin-right:6px; user-select:none; } .chip.on { color:var(--text); border-color:var(--acc); }
+  @media (max-width:600px) { .wrap { padding:12px; } }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>AUTOPILOT <small>paper money · decided by Claude · runs on the server</small></h1>
+  <h1>AUTOPILOT <small>ap-v1.13 · top 20 coins · paper money · decided by Claude · runs on the server</small></h1>
   <div class="sub" id="status">loading…</div>
-  <div class="grid" id="desks"></div>
-  <h2>Latest decisions</h2><div class="card" id="decs"></div>
+  <div class="kpis" id="kpis"></div>
+  <h2>Top 20: Algo desk vs AI desk, $250 each per coin <span class="mut" style="text-transform:none;letter-spacing:0">· click a column to sort</span></h2>
+  <div class="scroll"><table id="tbl"></table></div>
+  <h2>Latest decisions</h2>
+  <div style="margin-bottom:8px"><span class="chip" id="fAll">All</span><span class="chip" id="fTrade">Only trade calls</span></div>
+  <div class="card" id="decs"></div>
   <h2>Latest news scans</h2><div class="grid" id="news"></div>
   <p class="sub">Paper trading only. Nothing here places real orders. <a href="/">Back to the formula desk</a></p>
 </div>
@@ -38,37 +55,89 @@
 (function () {
   var URL = 'https://seiqqvplosnwquaksshm.supabase.co/rest/v1/';
   var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXFxdnBsb3Nud3F1YWtzc2htIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwNTAzMTUsImV4cCI6MjA5ODYyNjMxNX0.FPcGOaZqdAXje_BI1a8BKYQrMi5uS2zm0Oy3hopZdho';
-  var START = 150;
+  var START = 250, sortKey = 'edge', sortDir = -1, onlyTrades = false, D = null;
   function get(t, q) { return fetch(URL + t + '?' + q, { headers: { apikey: KEY, Authorization: 'Bearer ' + KEY } }).then(function (r) { if (!r.ok) throw new Error(t + ' ' + r.status); return r.json(); }); }
   var $ = function (id) { return document.getElementById(id); };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
-  var money = function (n) { return (n < 0 ? '-' : '') + '$' + Math.abs(n).toFixed(2); };
+  var money = function (n) { return (n < 0 ? '-' : n > 0 ? '+' : '') + '$' + Math.abs(n).toFixed(2); };
+  var pct = function (n, d) { return n == null || isNaN(n) ? '–' : (n >= 0 ? '+' : '') + (+n).toFixed(d == null ? 2 : d) + '%'; };
+  var cls = function (n) { return n > 0 ? 'up' : n < 0 ? 'down' : 'mut'; };
+  var px = function (p) { p = +p; return p >= 1000 ? p.toFixed(1) : p >= 10 ? p.toFixed(3) : p >= 1 ? p.toFixed(4) : p.toFixed(6); };
   var ago = function (iso) { var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 60 ? m + 'm ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : Math.round(m / 1440) + 'd ago'; };
+  function stats(list) { var closed = list.filter(function (p) { return p.status === 'closed'; }), w = closed.filter(function (p) { return +p.pnl >= 0; }).length; return { trades: closed.length, w: w, l: closed.length - w, pnl: closed.reduce(function (s, p) { return s + +p.pnl; }, 0), fees: closed.reduce(function (s, p) { return s + +p.fees; }, 0), open: list.filter(function (p) { return p.status === 'open'; })[0] || null }; }
+  function build(r) {
+    var pos = r[0], decs = r[1], news = r[2], smp = r[3], coins = {}, latest = {};
+    smp.forEach(function (x) { if (!latest[x.coin]) latest[x.coin] = x; });
+    Object.keys(latest).forEach(function (c) { coins[c] = true; }); pos.forEach(function (p) { coins[p.coin.split(':')[0]] = true; });
+    var btc = latest.BTC, rows = Object.keys(coins).map(function (c) {
+      var ai = stats(pos.filter(function (p) { return p.coin === c; })), al = stats(pos.filter(function (p) { return p.coin === c + ':algo'; })), l = latest[c], d = decs.filter(function (x) { return x.coin === c; })[0];
+      return { coin: c, price: l ? +l.price : null, ch24: l ? +l.change24h : null, r60: l ? +l.ret_60m : null, rel: l && btc ? +l.ret_60m - +btc.ret_60m : null, ai: ai, al: al, aiPnl: ai.pnl, alPnl: al.pnl, edge: ai.pnl - al.pnl, last: d };
+    });
+    D = { rows: rows, decs: decs, news: news, pos: pos, latest: latest };
+  }
+  function kpis() {
+    var ai = stats(D.pos.filter(function (p) { return p.coin.indexOf(':') < 0; })), al = stats(D.pos.filter(function (p) { return /:algo$/.test(p.coin); }));
+    var nc = D.rows.length, lat = Object.keys(D.latest).map(function (c) { return D.latest[c]; }), up = lat.filter(function (x) { return +x.ret_60m > 0; }).length;
+    var wr = function (s) { return s.trades ? Math.round(s.w / s.trades * 100) + '% win' : 'no trades'; };
+    var cell = function (l, v, n, c) { return '<div class="kpi"><div class="l">' + l + '</div><div class="v ' + (c || '') + '">' + v + '</div><div class="n">' + n + '</div></div>'; };
+    $('kpis').innerHTML = cell('Algo desk P&amp;L', money(al.pnl), al.trades + ' trades · ' + wr(al) + ' · fees $' + al.fees.toFixed(2), cls(al.pnl)) +
+      cell('AI desk P&amp;L', money(ai.pnl), ai.trades + ' trades · ' + wr(ai) + ' · fees $' + ai.fees.toFixed(2), cls(ai.pnl)) +
+      cell('Leader', ai.pnl === al.pnl ? 'tie' : ai.pnl > al.pnl ? 'AI' : 'Algo', 'by ' + money(Math.abs(ai.pnl - al.pnl)) + ' so far') +
+      cell('Bank per desk', '$' + START, nc + ' coins × 2 desks × $' + START + ' = $' + (nc * 2 * START)) +
+      cell('Open now', D.pos.filter(function (p) { return p.status === 'open'; }).length, D.pos.filter(function (p) { return p.status === 'open' && /:algo$/.test(p.coin); }).length + ' algo · ' + D.pos.filter(function (p) { return p.status === 'open' && p.coin.indexOf(':') < 0; }).length + ' AI (AI cap is 5)') +
+      cell('Market (60m)', lat.length ? up + ' up · ' + (lat.length - up) + ' down' : '–', 'breadth of ' + lat.length + ' coins');
+  }
+  function deskCell(s) {
+    return '<td>' + (s.open ? '<span class="pill ' + esc(s.open.side) + '">' + esc(s.open.side) + '</span>' : '<span class="mut">flat</span>') + '</td><td class="mono">' + s.trades + ' <span class="mut">(' + s.w + '-' + s.l + ')</span></td>';
+  }
+  function bar(v, mx) { var w = Math.min(50, Math.abs(v) / mx * 50); return '<span class="bar"><b></b><i style="background:var(--' + (v >= 0 ? 'up' : 'down') + ');' + (v >= 0 ? 'left:50%;' : 'right:50%;') + 'width:' + w + '%"></i></span> '; }
+  function table() {
+    var cols = [['coin', 'Coin'], ['price', 'Price'], ['ch24', '24h'], ['r60', '60m'], ['rel', 'vs BTC'], ['alPnl', 'Algo P&L'], ['alPos', 'Algo pos'], ['alTr', 'Algo trades'], ['aiPnl', 'AI P&L'], ['aiPos', 'AI pos'], ['aiTr', 'AI trades'], ['edge', 'AI − Algo'], ['last', 'Latest AI call']];
+    var get2 = function (r, k) { return k === 'alPos' ? (r.al.open ? r.al.open.side : '') : k === 'aiPos' ? (r.ai.open ? r.ai.open.side : '') : k === 'alTr' ? r.al.trades : k === 'aiTr' ? r.ai.trades : k === 'last' ? (r.last ? new Date(r.last.ts).getTime() : 0) : r[k]; };
+    var rows = D.rows.slice().sort(function (a, b) { var x = get2(a, sortKey), y = get2(b, sortKey); if (x == null) x = -1e18; if (y == null) y = -1e18; return typeof x === 'string' ? sortDir * x.localeCompare(y) : sortDir * (x - y); });
+    var mx = Math.max.apply(null, rows.map(function (r) { return Math.max(Math.abs(r.aiPnl), Math.abs(r.alPnl)); }).concat([1]));
+    var h = '<tr>' + cols.map(function (c) { return '<th data-k="' + c[0] + '" class="' + (c[0] === sortKey ? 'on' : '') + '">' + c[1] + (c[0] === sortKey ? (sortDir < 0 ? ' ▼' : ' ▲') : '') + '</th>'; }).join('') + '</tr>';
+    var tot = { ai: 0, al: 0 };
+    rows.forEach(function (r) {
+      tot.ai += r.aiPnl; tot.al += r.alPnl;
+      h += '<tr><td class="coin">' + esc(r.coin) + '</td><td class="mono">' + (r.price == null ? '–' : px(r.price)) + '</td><td class="mono ' + cls(r.ch24) + '">' + pct(r.ch24, 1) + '</td><td class="mono ' + cls(r.r60) + '">' + pct(r.r60) + '</td><td class="mono ' + cls(r.rel) + '">' + pct(r.rel) + '</td>' +
+        '<td class="mono ' + cls(r.alPnl) + '">' + bar(r.alPnl, mx) + money(r.alPnl) + '</td>' + deskCell(r.al) +
+        '<td class="mono ' + cls(r.aiPnl) + '">' + bar(r.aiPnl, mx) + money(r.aiPnl) + '</td>' + deskCell(r.ai) +
+        '<td class="mono ' + cls(r.edge) + '">' + (r.ai.trades + r.al.trades ? money(r.edge) : '–') + '</td>' +
+        '<td>' + (r.last ? '<span class="pill ' + esc(r.last.action) + '">' + esc(r.last.action) + '</span> <span class="mut">' + (+r.last.confidence).toFixed(2) + ' · ' + ago(r.last.ts) + '</span>' : '<span class="mut">not asked yet</span>') + '</td></tr>';
+    });
+    h += '<tr><td class="coin">TOTAL</td><td></td><td></td><td></td><td></td><td class="mono ' + cls(tot.al) + '"><b>' + money(tot.al) + '</b></td><td></td><td></td><td class="mono ' + cls(tot.ai) + '"><b>' + money(tot.ai) + '</b></td><td></td><td></td><td class="mono ' + cls(tot.ai - tot.al) + '"><b>' + money(tot.ai - tot.al) + '</b></td><td></td></tr>';
+    $('tbl').innerHTML = h;
+    Array.prototype.forEach.call($('tbl').querySelectorAll('th'), function (th) { th.onclick = function () { var k = th.getAttribute('data-k'); if (k === sortKey) sortDir = -sortDir; else { sortKey = k; sortDir = k === 'coin' ? 1 : -1; } table(); }; });
+  }
+  function decisions() {
+    var list = D.decs.filter(function (d) { return !onlyTrades || d.action !== 'PASS'; });
+    $('fAll').className = 'chip' + (onlyTrades ? '' : ' on'); $('fTrade').className = 'chip' + (onlyTrades ? ' on' : '');
+    $('decs').innerHTML = list.length ? list.map(function (d) {
+      var mv = d.outcome_price ? ((+d.outcome_price - +d.price) / +d.price * 100) : null, res = '';
+      if (mv != null) {
+        if (d.action === 'PASS') res = 'price 15m later: ' + pct(mv) + (Math.abs(mv) >= 0.5 ? ' (a real move, was staying out right?)' : ' (small move, staying out was fine)');
+        else { var dir = d.action === 'LONG' ? 1 : -1, good = dir * mv > 0; res = 'price 15m later: ' + pct(mv) + ' · <span class="' + (good ? 'up' : 'down') + '">' + (good ? 'moved our way' : 'moved against us') + '</span>'; }
+      } else res = 'outcome pending';
+      var parts = String(d.reason || '').split(/\s*[;|]\s*/);
+      return '<div class="dec"><div class="row"><span><span class="pill ' + esc(d.action) + '">' + esc(d.action) + '</span> <b>' + esc(d.coin) + '</b> <span class="mut">conf ' + (+d.confidence).toFixed(2) + '</span><span class="conf"><i style="width:' + Math.round(+d.confidence * 100) + '%"></i></span><span class="mut">' + (d.taken ? 'traded' : 'no trade') + (d.action !== 'PASS' ? ' · TP ' + (+d.tp_pct) + '% SL ' + (+d.sl_pct) + '%' : '') + '</span></span><span class="mut">' + ago(d.ts) + '</span></div>' +
+        '<div class="think">' + esc(d.reason) + '</div><div class="res">' + res + '</div></div>';
+    }).join('') : '<span class="mut">No decisions yet. Claude is asked about the 3 coins with the biggest moves every 5 minutes.</span>';
+  }
+  function newsCards() {
+    $('news').innerHTML = D.news.length ? D.news.map(function (n) {
+      var src = (n.sources || []).slice(0, 2).map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">source</a>'; }).join(' · ');
+      return '<div class="card news"><div class="row"><b>' + esc(n.coin) + '</b><span class="pill">' + esc(n.sentiment) + ' · ' + (+n.strength).toFixed(2) + '</span></div><div><b>' + esc(n.catalyst) + '</b></div><div>' + esc(n.summary) + '</div><div class="mut">' + ago(n.ts) + ' ' + src + '</div></div>';
+    }).join('') : '<div class="card mut">No news scan yet (one coin every 15 minutes).</div>';
+  }
+  function paint() { kpis(); table(); decisions(); newsCards(); }
   function load() {
-    Promise.all([get('ap_positions', 'select=*&order=opened_at.desc&limit=300'), get('ap_decisions', 'select=*&order=ts.desc&limit=25'), get('ap_news', 'select=*&order=ts.desc&limit=6')]).then(function (r) {
-      var pos = r[0], decs = r[1], news = r[2], html = '';
-      ['BTC', 'NEAR'].forEach(function (c) {
-        var mine = pos.filter(function (p) { return p.coin === c; }), closed = mine.filter(function (p) { return p.status === 'closed'; });
-        var pnl = closed.reduce(function (s, p) { return s + +p.pnl; }, 0), fees = closed.reduce(function (s, p) { return s + +p.fees; }, 0);
-        var wins = closed.filter(function (p) { return +p.pnl >= 0; }).length, open = mine.filter(function (p) { return p.status === 'open'; })[0];
-        html += '<div class="card"><div class="row"><b>' + c + ' / USDT</b><span class="pill">paper</span></div>' +
-          '<div class="big ' + (pnl >= 0 ? 'up' : 'down') + '">' + money(START + pnl) + '</div>' +
-          '<div class="mut">P&amp;L ' + money(pnl) + ' · fees ' + money(fees) + ' · ' + closed.length + ' trades · ' + wins + 'W ' + (closed.length - wins) + 'L</div>' +
-          '<div style="margin-top:8px">' + (open ? '<b>' + esc(open.side) + '</b> from ' + (+open.entry_price) + ' · TP ' + (+open.tp) + ' · SL ' + (+open.sl) + ' <span class="mut">(' + ago(open.opened_at) + ')</span>' : '<span class="mut">flat, waiting for a good setup</span>') + '</div></div>';
-      });
-      $('desks').innerHTML = html;
-      $('decs').innerHTML = decs.length ? decs.map(function (d) {
-        var mv = d.outcome_price ? ((+d.outcome_price - +d.price) / +d.price * 100) : null;
-        return '<div class="dec"><div class="row"><span><b>' + esc(d.coin) + ' ' + esc(d.action) + '</b> <span class="mut">conf ' + (+d.confidence).toFixed(2) + (d.taken ? ' · traded' : ' · no trade') + '</span></span><span class="mut">' + ago(d.ts) + '</span></div>' +
-          '<div>' + esc(d.reason) + '</div>' + (mv != null ? '<div class="mut">price 15m later: ' + (mv >= 0 ? '+' : '') + mv.toFixed(2) + '%</div>' : '') + '</div>';
-      }).join('') : '<span class="mut">No decisions yet. Claude is only asked when the market moves or news is hot.</span>';
-      $('news').innerHTML = news.length ? news.map(function (n) {
-        var src = (n.sources || []).slice(0, 2).map(function (u) { return '<a href="' + esc(u) + '" target="_blank" rel="noopener">source</a>'; }).join(' · ');
-        return '<div class="card news"><div class="row"><b>' + esc(n.coin) + '</b><span class="pill">' + esc(n.sentiment) + ' · ' + (+n.strength).toFixed(2) + '</span></div><div><b>' + esc(n.catalyst) + '</b></div><div>' + esc(n.summary) + '</div><div class="mut">' + ago(n.ts) + ' ' + src + '</div></div>';
-      }).join('') : '<div class="card mut">No news scan yet (runs every 2 hours).</div>';
-      $('status').textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · refreshes every 30s';
+    Promise.all([get('ap_positions', 'select=*&order=opened_at.desc&limit=1000'), get('ap_decisions', 'select=*&order=ts.desc&limit=40'), get('ap_news', 'select=*&order=ts.desc&limit=9'), get('ap_samples', 'select=coin,price,ret_60m,change24h,ts&order=ts.desc&limit=60')]).then(function (r) {
+      build(r); paint();
+      $('status').textContent = 'updated ' + new Date().toISOString().slice(11, 19) + ' UTC · refreshes every 30s · ' + D.rows.length + ' coins tracked';
     }).catch(function (e) { $('status').innerHTML = '<span class="err">could not load: ' + esc(e.message) + '</span>'; });
   }
+  $('fAll').onclick = function () { onlyTrades = false; if (D) decisions(); }; $('fTrade').onclick = function () { onlyTrades = true; if (D) decisions(); };
   load(); setInterval(load, 30000);
 })();
 </script>
