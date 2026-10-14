@@ -353,14 +353,17 @@ export function algoSignal(m) {
   if (!(side === 'LONG' ? p >= m3 * 1.0003 : p <= m3 * 0.9997)) return { why: 'no turn yet' };
   return { side };
 }
-async function algoTick(db, r, openAlgo, closedAlgo) {
-  const key = r.coin + ':algo', m = r.m;
+/* Algo v2 (found in the 14 Oct snapshot analysis): SHORT after a 1.5%+ bounce off the 60m low while the last 5 minutes are still rising. Forward test only. */
+export const bounceFade = (r) => (r.F.bounce_pct >= 1.5 && r.F.ret_5m > 0 ? { side: 'SHORT' } : { why: 'no bounce to fade' });
+async function algoTick(db, r, openAlgo, closedAlgo, v) {
+  v = v || 'algo';
+  const key = r.coin + ':' + v, m = r.m;
   const open = openAlgo[key];
   if (open) { const x = await manageOpen(db, open, m); return x.closed ? 'closed ' + x.pnl.toFixed(2) : 'holding'; }
   const closed = closedAlgo[key] || [], bank = START + closed.reduce((s, x) => s + +x.pnl, 0);
   if (closed[0] && Date.now() - new Date(closed[0].closed_at).getTime() < ALGO.cooldownMin * 60000) return 'cooldown';
   if (bank < 20 || (r.spread_bps != null && r.spread_bps > MAX_SPREAD_BPS)) return 'skip';
-  const sig = algoSignal(m);
+  const sig = v === 'algo2' ? bounceFade(r) : algoSignal(m);
   if (!sig.side) return sig.why;
   const dir = sig.side === 'LONG' ? 1 : -1, notional = bank * LEV, d = decFor(m.price) + 2;
   await db.insert('ap_positions', { coin: key, side: sig.side, entry_price: m.price, size: notional / m.price, notional, tp: +(m.price * (1 + dir * ALGO.tp / 100)).toFixed(d), sl: +(m.price * (1 - dir * ALGO.sl / 100)).toFixed(d), max_hold_until: new Date(Date.now() + ALGO.holdMin * 60000).toISOString() });
@@ -376,10 +379,11 @@ export async function tickAll(env) {
   const pend = await db.select('ap_positions', 'select=*&status=eq.pending').catch(() => []);
   cnt.m += pend.length;
   const pendRes = await Promise.all(pend.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? limitTick(db, pp, r.m).then((x) => { if (x !== 'waiting') cnt.m--; return pp.coin + ' ' + x; }).catch(() => null) : null; }));
-  for (const p of openAll) if (p.coin.endsWith(':algo')) openAlgo[p.coin] = p;
+  for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2')) openAlgo[p.coin] = p;
   const openSet = new Set(open.map((p) => p.coin)), closedAlgo = {};
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
-  const algoRes = await Promise.all(rows.map((r) => algoTick(db, r, openAlgo, closedAlgo).then((s) => r.coin + ' ' + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60))));
+  for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo2&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  const algoRes = await Promise.all(rows.concat(rows).map((r, i) => algoTick(db, r, openAlgo, closedAlgo, i < rows.length ? 'algo' : 'algo2').then((s) => r.coin + (i < rows.length ? ' ' : ' v2 ') + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60))));
   const mirRes = await Promise.all(openMir.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? manageOpen(db, pp, r.m).then((x) => { if (x.closed) cnt[modeOf(pp.coin)]--; return x.closed ? pp.coin + ' closed ' + x.pnl.toFixed(2) : null; }).catch(() => null) : null; }));
   const rets = rows.map((r) => r.F.ret_60m).sort((x, y) => x - y), btc = rows.find((r) => r.coin === 'BTC');
   const closed = await db.select('ap_positions', 'select=side,pnl&status=eq.closed&coin=not.like.*:*&order=closed_at.desc&limit=40').catch(() => []);

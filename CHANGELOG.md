@@ -2,6 +2,9 @@
 
 Every push bumps the version. The version shows next to the title on the page, so you can tell which build Netlify is serving.
 
+## v1.19
+- Algo v2 desk (stored as `XXX:algo2`): plain rule found by analysing the first 5.7 hours of snapshots. SHORT after a 1.5%+ bounce off the 60 minute low while the last 5 minutes are still rising; take profit 0.6%, stop 0.6%, 30 minute hold, 10 minute cooldown, $250 per coin. A paper forward-test, not a proven edge. Shown as its own row in the desk table.
+
 ## v1.18
 - Maker desk (limit orders): reads the same Claude calls as the Aggressive desk (gate 50%, max 10 open, top 8 movers) but enters with a limit order 0.10% better than the price (below for longs, above for shorts). The order fills only if price trades through it by 0.02%; otherwise it is cancelled after 10 minutes and counted as a miss. Fees: 0.02% maker on entry and on take profit, 0.055% taker on stop and time exits. Stored as coin `XXX:m` with status `pending` / `cancelled`. The page shows the fill rate in the desk table and has a Maker button in the AI desk mode switch.
 
