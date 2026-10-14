@@ -17,6 +17,8 @@ jobs:
       - run: node scripts/recap.mjs
       - name: Make mp4
         run: |
+          sudo apt-get install -y ffmpeg >/dev/null
+          ls -la rec
           f=$(ls rec/*.webm | head -1)
           ffmpeg -y -i "$f" -ss 2 -c:v libx264 -pix_fmt yuv420p -crf 23 recap.mp4
       - name: Publish release
