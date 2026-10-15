@@ -12,10 +12,10 @@ export const MAX_SPREAD_BPS = 12;
 export const MODES = [
   { id: 'n', suffix: ':n', name: 'Normal', gate: 0.55, cap: 5, picks: 4, minTp: 0.5 },
   { id: 'a', suffix: '', name: 'Aggressive', gate: 0.50, cap: 10, picks: 8, minTp: 0.35 },
-  { id: 's', suffix: ':s', name: 'Super', gate: 0.45, cap: 15, picks: 12, minTp: 0.3 },
-  { id: 'u', suffix: ':u', name: 'Ultra', gate: 0.40, cap: 25, picks: 16, minTp: 0.25 },
+  { id: 's', paused: true, suffix: ':s', name: 'Super', gate: 0.45, cap: 15, picks: 12, minTp: 0.3 },
+  { id: 'u', paused: true, suffix: ':u', name: 'Ultra', gate: 0.40, cap: 25, picks: 16, minTp: 0.25 },
   // Maker: same calls as Aggressive but enters with a LIMIT order 0.10% better than the price, waits up to 10 minutes, pays maker fees (0.02%) on entry and on take profit
-  { id: 'm', suffix: ':m', name: 'Maker', gate: 0.50, cap: 10, picks: 8, minTp: 0.35, limit: true }
+  { id: 'm', paused: true, suffix: ':m', name: 'Maker', gate: 0.50, cap: 10, picks: 8, minTp: 0.35, limit: true }
 ];
 export const MAKER_FEE = 0.0002, LIMIT_OFF = 0.10, LIMIT_WAIT_MIN = 10, FILL_THROUGH = 0.0002;
 export const PICKS = 16;
@@ -234,7 +234,7 @@ export async function tick(env, coin, shared) {
   for (const md of MODES) {
     const key = coin + md.suffix, rows = md.id === 'a' ? closedAll : mir.filter((x) => x.coin === key && x.status === 'closed'), hasOpen = md.id !== 'a' && mir.some((x) => x.coin === key && (x.status === 'open' || x.status === 'pending'));
     const bk = START + rows.reduce((q, x) => q + +x.pnl, 0), last = rows[0] && rows[0].closed_at;
-    elig[md.id] = { bank: bk, ok: rank < md.picks && shared.modes[md.id].n > 0 && !hasOpen && bk >= 20 && !(last && Date.now() - new Date(last).getTime() < COOLDOWN_MIN * 60000) };
+    elig[md.id] = { bank: bk, ok: !md.paused && rank < md.picks && shared.modes[md.id].n > 0 && !hasOpen && bk >= 20 && !(last && Date.now() - new Date(last).getTime() < COOLDOWN_MIN * 60000) };
   }
   if (!MODES.some((md) => elig[md.id].ok)) { out.skip = 'no desk can trade this coin now'; return out; }
 
@@ -355,19 +355,41 @@ export function algoSignal(m) {
 }
 /* Algo v2 (found in the 14 Oct snapshot analysis): SHORT after a 1.5%+ bounce off the 60m low while the last 5 minutes are still rising. Forward test only. */
 export const bounceFade = (r) => (r.F.bounce_pct >= 1.5 && r.F.ret_5m > 0 ? { side: 'SHORT' } : { why: 'no bounce to fade' });
-async function algoTick(db, r, openAlgo, closedAlgo, v) {
+export const ALGO3 = { tp: 2, sl: 1, holdMin: 120, cooldownMin: 15, breadth: 0.9 };
+async function algoTick(db, r, openAlgo, closedAlgo, v, breadth) {
   v = v || 'algo';
+  const P = v === 'algo3' ? ALGO3 : v === 'algo2' ? { ...ALGO, cooldownMin: 15 } : ALGO;
   const key = r.coin + ':' + v, m = r.m;
   const open = openAlgo[key];
   if (open) { const x = await manageOpen(db, open, m); return x.closed ? 'closed ' + x.pnl.toFixed(2) : 'holding'; }
   const closed = closedAlgo[key] || [], bank = START + closed.reduce((s, x) => s + +x.pnl, 0);
-  if (closed[0] && Date.now() - new Date(closed[0].closed_at).getTime() < ALGO.cooldownMin * 60000) return 'cooldown';
+  if (closed[0] && Date.now() - new Date(closed[0].closed_at).getTime() < P.cooldownMin * 60000) return 'cooldown';
   if (bank < 20 || (r.spread_bps != null && r.spread_bps > MAX_SPREAD_BPS)) return 'skip';
-  const sig = v === 'algo2' ? bounceFade(r) : algoSignal(m);
+  const sig = v === 'algo3' ? (breadth >= ALGO3.breadth ? bounceFade(r) : { why: 'breadth ' + breadth.toFixed(2) + ' < gate' }) : v === 'algo2' ? bounceFade(r) : algoSignal(m);
   if (!sig.side) return sig.why;
   const dir = sig.side === 'LONG' ? 1 : -1, notional = bank * LEV, d = decFor(m.price) + 2;
-  await db.insert('ap_positions', { coin: key, side: sig.side, entry_price: m.price, size: notional / m.price, notional, tp: +(m.price * (1 + dir * ALGO.tp / 100)).toFixed(d), sl: +(m.price * (1 - dir * ALGO.sl / 100)).toFixed(d), max_hold_until: new Date(Date.now() + ALGO.holdMin * 60000).toISOString() });
+  await db.insert('ap_positions', { coin: key, side: sig.side, entry_price: m.price, size: notional / m.price, notional, tp: +(m.price * (1 + dir * P.tp / 100)).toFixed(d), sl: +(m.price * (1 - dir * P.sl / 100)).toFixed(d), max_hold_until: new Date(Date.now() + P.holdMin * 60000).toISOString() });
   return 'opened ' + sig.side;
+}
+
+/* Neutral Reversal desk (:rev): every 24h long the 8 weakest and short the 8 strongest coins by 24h change. No stops, 24h hold. Backtest: positive in bear and bull, but only 14 days of data. Forward test. */
+export const REV = { K: 8, holdH: 24 };
+async function revTick(db, rows, openRev) {
+  const mine = Object.values(openRev);
+  const out = [];
+  for (const p of mine) { const r = rows.find((x) => x.coin === p.coin.split(':')[0]); if (r) { const x = await manageOpen(db, p, r.m).catch(() => null); if (x && x.closed) out.push(p.coin + ' closed ' + x.pnl.toFixed(2)); } }
+  if (mine.length) return out;
+  const last = (await db.select('ap_positions', 'select=opened_at&coin=like.*:rev&order=opened_at.desc&limit=1').catch(() => []))[0];
+  if (last && Date.now() - new Date(last.opened_at).getTime() < REV.holdH * 3600000) return out;
+  const rk = rows.filter((r) => r.m.change24h_pct != null && (r.spread_bps == null || r.spread_bps <= MAX_SPREAD_BPS)).sort((a, b) => a.m.change24h_pct - b.m.change24h_pct);
+  if (rk.length < REV.K * 2 + 4) return out;
+  const legs = rk.slice(0, REV.K).map((r) => [r, 1]).concat(rk.slice(-REV.K).map((r) => [r, -1]));
+  for (const [r, dir] of legs) {
+    const m = r.m, notional = START * LEV, d = decFor(m.price) + 2;
+    await db.insert('ap_positions', { coin: r.coin + ':rev', side: dir > 0 ? 'LONG' : 'SHORT', entry_price: m.price, size: notional / m.price, notional, tp: +(m.price * (1 + dir * 0.5)).toFixed(d), sl: +(m.price * (1 - dir * 0.5)).toFixed(d), max_hold_until: new Date(Date.now() + REV.holdH * 3600000).toISOString() });
+    out.push('rev opened ' + (dir > 0 ? 'LONG ' : 'SHORT ') + r.coin);
+  }
+  return out;
 }
 
 export async function tickAll(env) {
@@ -379,11 +401,15 @@ export async function tickAll(env) {
   const pend = await db.select('ap_positions', 'select=*&status=eq.pending').catch(() => []);
   cnt.m += pend.length;
   const pendRes = await Promise.all(pend.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? limitTick(db, pp, r.m).then((x) => { if (x !== 'waiting') cnt.m--; return pp.coin + ' ' + x; }).catch(() => null) : null; }));
-  for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2')) openAlgo[p.coin] = p;
+  for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2') || p.coin.endsWith(':algo3')) openAlgo[p.coin] = p;
+  const openRev = {}; for (const p of openAll) if (p.coin.endsWith(':rev')) openRev[p.coin] = p;
   const openSet = new Set(open.map((p) => p.coin)), closedAlgo = {};
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo2&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
-  const algoRes = await Promise.all(rows.concat(rows).map((r, i) => algoTick(db, r, openAlgo, closedAlgo, i < rows.length ? 'algo' : 'algo2').then((s) => r.coin + (i < rows.length ? ' ' : ' v2 ') + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60))));
+  for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo3&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  const breadth = rows.filter((r) => r.F.ret_60m < 0).length / Math.max(1, rows.length), VN = ['algo', 'algo2', 'algo3'], TAG = [' ', ' v2 ', ' v3 '];
+  const revRes = await revTick(db, rows, openRev).catch((e) => ['rev error ' + String(e.message || e).slice(0, 60)]);
+  const algoRes = await Promise.all(VN.flatMap((v, vi) => rows.map((r) => algoTick(db, r, openAlgo, closedAlgo, v, breadth).then((s) => r.coin + TAG[vi] + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60)))));
   const mirRes = await Promise.all(openMir.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? manageOpen(db, pp, r.m).then((x) => { if (x.closed) cnt[modeOf(pp.coin)]--; return x.closed ? pp.coin + ' closed ' + x.pnl.toFixed(2) : null; }).catch(() => null) : null; }));
   const rets = rows.map((r) => r.F.ret_60m).sort((x, y) => x - y), btc = rows.find((r) => r.coin === 'BTC');
   const closed = await db.select('ap_positions', 'select=side,pnl&status=eq.closed&coin=not.like.*:*&order=closed_at.desc&limit=40').catch(() => []);
@@ -399,7 +425,7 @@ export async function tickAll(env) {
   for (const md of MODES) shared.modes[md.id].n = md.cap - cnt[md.id];
   const todo = Array.from(openSet).concat(picks).filter((s) => COINS[s]);
   const res = await Promise.all(todo.map((coin) => tick(env, coin, shared).catch((e) => ({ coin, error: String(e.message || e).slice(0, 200) }))));
-  return [{ scanned: rows.length, picks, open: Array.from(openSet), algo: algoRes.filter((x) => /opened|closed|error/.test(x)), mirrorsClosed: mirRes.filter(Boolean), limits: pendRes.filter(Boolean), openByDesk: cnt }].concat(res);
+  return [{ scanned: rows.length, picks, open: Array.from(openSet), algo: algoRes.filter((x) => /opened|closed|error/.test(x)), rev: revRes, breadth: +breadth.toFixed(2), mirrorsClosed: mirRes.filter(Boolean), limits: pendRes.filter(Boolean), openByDesk: cnt }].concat(res);
 }
 
 /* Pick which coin the news job scans next: coins with an open trade or the biggest 24h move, oldest scan first. */
