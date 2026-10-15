@@ -15,11 +15,14 @@ export const MODES = [
   { id: 's', paused: true, suffix: ':s', name: 'Super', gate: 0.45, cap: 15, picks: 12, minTp: 0.3 },
   { id: 'u', paused: true, suffix: ':u', name: 'Ultra', gate: 0.40, cap: 25, picks: 16, minTp: 0.25 },
   // Maker: same calls as Aggressive but enters with a LIMIT order 0.10% better than the price, waits up to 10 minutes, pays maker fees (0.02%) on entry and on take profit
-  { id: 'm', paused: true, suffix: ':m', name: 'Maker', gate: 0.50, cap: 10, picks: 8, minTp: 0.35, limit: true }
+  { id: 'm', paused: true, suffix: ':m', name: 'Maker', gate: 0.50, cap: 10, picks: 8, minTp: 0.35, limit: true },
+  // Gated AI: same calls as Aggressive, but SHORT calls are ignored unless 90%+ of coins are falling over 60 minutes (forward test of the Algo v3 gate on the AI)
+  { id: 'g', suffix: ':g', name: 'Gated AI', gate: 0.50, cap: 10, picks: 8, minTp: 0.35, gateShort: true }
 ];
+export const SHORT_GATE_BREADTH = 0.9;
 export const MAKER_FEE = 0.0002, LIMIT_OFF = 0.10, LIMIT_WAIT_MIN = 10, FILL_THROUGH = 0.0002;
 export const PICKS = 16;
-const modeOf = (key) => (/:m$/.test(key) ? 'm' : /:n$/.test(key) ? 'n' : /:s$/.test(key) ? 's' : /:u$/.test(key) ? 'u' : key.includes(':') ? null : 'a');
+const modeOf = (key) => (/:m$/.test(key) ? 'm' : /:g$/.test(key) ? 'g' : /:n$/.test(key) ? 'n' : /:s$/.test(key) ? 's' : /:u$/.test(key) ? 'u' : key.includes(':') ? null : 'a');
 export const decFor = (p) => (p >= 1000 ? 2 : p >= 10 ? 3 : p >= 1 ? 4 : 6);
 let instAt = 0, INST = {};
 /* Watchlist: the page appends a desk_events row (kind 'watchlist', data.list). The newest one wins. Always 50 live coins:
@@ -208,7 +211,7 @@ async function backfillSamples(db, coin, m) {
 const SYSTEM = 'You are CHIEF of an autonomous PAPER trading desk covering the top 50 coins (at most 10 open trades at once; 5x leverage, $250 bank per coin; a rule-based algo desk trades the same coins beside you and you are being compared with it). Round-trip taker fees are 0.11%, so a trade must have a realistic expected move of at least 0.35% to be worth it. You are in AGGRESSIVE mode: the owner wants more trades, so act on good-enough setups instead of waiting for perfect ones. Think in this order and let it show in your reason: (1) REGIME: use market_context (breadth of the top 20, BTC trend) to say whether this is a trend, a range or an event-driven chop; (2) EDGE: is this coin stronger or weaker than BTC (this_coin_vs_btc_60m_pct) and is that move continuing or exhausted; (3) CATALYST: only count news that is under 6 hours old, is not already priced in, and whose scheduled event has not already happened; (4) COST: expected move vs the 0.11% fee and the spread; (5) TRACK RECORD: desk_track_record and recent_decisions show what has worked, so do not repeat a losing pattern. Take a trade whenever one side has a clear edge (momentum continuing with BTC, or an exhausted spike worth fading); PASS only when there is truly no edge or the move already ran. Never chase a move that already ran more than 2.5x the coin\'s normal 15 minute range. Confidence means your honest probability that the trade reaches take profit before the stop: use 0.5 for a coin flip, 0.55+ when two of regime, edge and catalyst agree. You choose the exit plan: tp_pct (0.35 to 3), sl_pct (0.25 to 1.5), hold_min (15 to 360); tp_pct must be at least 1.2x sl_pct. Reply with ONLY JSON: {"action":"LONG"|"SHORT"|"PASS","confidence":0..1,"reason":"max 260 chars: regime, edge, catalyst, cost, in that order","tp_pct":number,"sl_pct":number,"hold_min":number}';
 
 export async function tick(env, coin, shared) {
-  shared = shared || { modes: { n: { n: 5 }, a: { n: 10 }, s: { n: 15 }, u: { n: 25 }, m: { n: 10 } }, rank: {} };
+  shared = shared || { modes: { n: { n: 5 }, a: { n: 10 }, s: { n: 15 }, u: { n: 25 }, m: { n: 10 }, g: { n: 10 } }, rank: {}, breadth: 0 };
   const rank = shared.rank && shared.rank[coin] != null ? shared.rank[coin] : 99;
   if (!env.SUPABASE_SERVICE_KEY || !env.ANTHROPIC_API_KEY) return { skipped: 'missing keys' };
   const db = sb(env.SUPABASE_SERVICE_KEY);
@@ -229,7 +232,7 @@ export async function tick(env, coin, shared) {
   }
   if (m.spread_bps > MAX_SPREAD_BPS) { out.skip = 'spread too wide ' + m.spread_bps.toFixed(1) + 'bps'; return out; }
   // which desks could act on a decision for this coin right now
-  const mir = await db.select('ap_positions', 'select=coin,pnl,closed_at,status&or=(coin.eq.' + coin + ':n,coin.eq.' + coin + ':s,coin.eq.' + coin + ':u,coin.eq.' + coin + ':m)&order=closed_at.desc.nullsfirst&limit=400').catch(() => []);
+  const mir = await db.select('ap_positions', 'select=coin,pnl,closed_at,status&or=(coin.eq.' + coin + ':n,coin.eq.' + coin + ':s,coin.eq.' + coin + ':u,coin.eq.' + coin + ':m,coin.eq.' + coin + ':g)&order=closed_at.desc.nullsfirst&limit=400').catch(() => []);
   const elig = {};
   for (const md of MODES) {
     const key = coin + md.suffix, rows = md.id === 'a' ? closedAll : mir.filter((x) => x.coin === key && x.status === 'closed'), hasOpen = md.id !== 'a' && mir.some((x) => x.coin === key && (x.status === 'open' || x.status === 'pending'));
@@ -269,6 +272,7 @@ export async function tick(env, coin, shared) {
   const opened = [];
   if (action !== 'PASS') for (const md of MODES) {
     if (!elig[md.id].ok || conf < md.gate) continue;
+    if (md.gateShort && action === 'SHORT' && !(shared.breadth >= SHORT_GATE_BREADTH)) { opened.push(md.id + '(short blocked)'); continue; }
     const tpM = Math.max(md.minTp, tpP), dir = action === 'LONG' ? 1 : -1, bk = elig[md.id].bank, notional = bk * LEV, d = decFor(m.price) + 2;
     shared.modes[md.id].n--;
     if (md.limit) {
@@ -355,6 +359,7 @@ export function algoSignal(m) {
 }
 /* Algo v2 (found in the 14 Oct snapshot analysis): SHORT after a 1.5%+ bounce off the 60m low while the last 5 minutes are still rising. Forward test only. */
 export const bounceFade = (r) => (r.F.bounce_pct >= 1.5 && r.F.ret_5m > 0 ? { side: 'SHORT' } : { why: 'no bounce to fade' });
+export const QUIET_HOURS_UTC = [11, 12, 13, 20, 21];
 export const ALGO3 = { tp: 2, sl: 1, holdMin: 120, cooldownMin: 15, breadth: 0.9 };
 async function algoTick(db, r, openAlgo, closedAlgo, v, breadth) {
   v = v || 'algo';
@@ -365,7 +370,7 @@ async function algoTick(db, r, openAlgo, closedAlgo, v, breadth) {
   const closed = closedAlgo[key] || [], bank = START + closed.reduce((s, x) => s + +x.pnl, 0);
   if (closed[0] && Date.now() - new Date(closed[0].closed_at).getTime() < P.cooldownMin * 60000) return 'cooldown';
   if (bank < 20 || (r.spread_bps != null && r.spread_bps > MAX_SPREAD_BPS)) return 'skip';
-  const sig = v === 'algo3' ? (breadth >= ALGO3.breadth ? bounceFade(r) : { why: 'breadth ' + breadth.toFixed(2) + ' < gate' }) : v === 'algo2' ? bounceFade(r) : algoSignal(m);
+  const sig = v === 'algoq' && QUIET_HOURS_UTC.includes(new Date().getUTCHours()) ? { why: 'quiet hours' } : v === 'algo3' ? (breadth >= ALGO3.breadth ? bounceFade(r) : { why: 'breadth ' + breadth.toFixed(2) + ' < gate' }) : v === 'algo2' ? bounceFade(r) : algoSignal(m);
   if (!sig.side) return sig.why;
   const dir = sig.side === 'LONG' ? 1 : -1, notional = bank * LEV, d = decFor(m.price) + 2;
   await db.insert('ap_positions', { coin: key, side: sig.side, entry_price: m.price, size: notional / m.price, notional, tp: +(m.price * (1 + dir * P.tp / 100)).toFixed(d), sl: +(m.price * (1 - dir * P.sl / 100)).toFixed(d), max_hold_until: new Date(Date.now() + P.holdMin * 60000).toISOString() });
@@ -392,22 +397,24 @@ async function revTick(db, rows, openRev) {
   return out;
 }
 
+const shared0Breadth = (rows) => rows.filter((r) => r.F.ret_60m < 0).length / Math.max(1, rows.length);
 export async function tickAll(env) {
   if (!env.SUPABASE_SERVICE_KEY || !env.ANTHROPIC_API_KEY) return [{ skipped: 'missing keys' }];
   const { rows, db } = await scanAll(env);
   const openAll = await db.select('ap_positions', 'select=*&status=eq.open');
-  const open = openAll.filter((p) => !p.coin.includes(':')), openAlgo = {}, openMir = openAll.filter((p) => /:[nsum]$/.test(p.coin)), cnt = { n: 0, a: 0, s: 0, u: 0, m: 0 };
+  const open = openAll.filter((p) => !p.coin.includes(':')), openAlgo = {}, openMir = openAll.filter((p) => /:[nsumg]$/.test(p.coin)), cnt = { n: 0, a: 0, s: 0, u: 0, m: 0, g: 0 };
   for (const p of openAll) { const k = modeOf(p.coin); if (k) cnt[k]++; }
   const pend = await db.select('ap_positions', 'select=*&status=eq.pending').catch(() => []);
   cnt.m += pend.length;
   const pendRes = await Promise.all(pend.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? limitTick(db, pp, r.m).then((x) => { if (x !== 'waiting') cnt.m--; return pp.coin + ' ' + x; }).catch(() => null) : null; }));
-  for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2') || p.coin.endsWith(':algo3')) openAlgo[p.coin] = p;
+  for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2') || p.coin.endsWith(':algo3') || p.coin.endsWith(':algoq')) openAlgo[p.coin] = p;
   const openRev = {}; for (const p of openAll) if (p.coin.endsWith(':rev')) openRev[p.coin] = p;
   const openSet = new Set(open.map((p) => p.coin)), closedAlgo = {};
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo2&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algoq&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo3&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
-  const breadth = rows.filter((r) => r.F.ret_60m < 0).length / Math.max(1, rows.length), VN = ['algo', 'algo2', 'algo3'], TAG = [' ', ' v2 ', ' v3 '];
+  const breadth = shared0Breadth(rows), VN = ['algo', 'algo2', 'algo3', 'algoq'], TAG = [' ', ' v2 ', ' v3 ', ' q '];
   const revRes = await revTick(db, rows, openRev).catch((e) => ['rev error ' + String(e.message || e).slice(0, 60)]);
   const algoRes = await Promise.all(VN.flatMap((v, vi) => rows.map((r) => algoTick(db, r, openAlgo, closedAlgo, v, breadth).then((s) => r.coin + TAG[vi] + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60)))));
   const mirRes = await Promise.all(openMir.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? manageOpen(db, pp, r.m).then((x) => { if (x.closed) cnt[modeOf(pp.coin)]--; return x.closed ? pp.coin + ' closed ' + x.pnl.toFixed(2) : null; }).catch(() => null) : null; }));
@@ -415,6 +422,7 @@ export async function tickAll(env) {
   const closed = await db.select('ap_positions', 'select=side,pnl&status=eq.closed&coin=not.like.*:*&order=closed_at.desc&limit=40').catch(() => []);
   const trk = (s) => { const a = closed.filter((x) => x.side === s); return { trades: a.length, wins: a.filter((x) => +x.pnl > 0).length, pnl: +a.reduce((p, x) => p + +x.pnl, 0).toFixed(2) }; };
   const shared = {
+    breadth: rows.filter((r) => r.F.ret_60m < 0).length / Math.max(1, rows.length),
     modes: Object.fromEntries(MODES.map((md) => [md.id, { n: md.cap - cnt[md.id] }])), btc60: btc ? btc.F.ret_60m : null,
     mkt: { coins_scanned: rows.length, up_60m: rows.filter((r) => r.F.ret_60m > 0).length, down_60m: rows.filter((r) => r.F.ret_60m < 0).length, median_ret_60m_pct: r4(rets[Math.floor(rets.length / 2)] || 0), btc_ret_60m_pct: btc ? r4(btc.F.ret_60m) : null, btc_change24h_pct: btc ? r4(btc.m.change24h_pct) : null },
     track: { last_40_closed: { LONG: trk('LONG'), SHORT: trk('SHORT') } }
