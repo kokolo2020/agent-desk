@@ -338,7 +338,7 @@ var x4 = stats(PS().filter(function (p) { return /:rev$/.test(p.coin); })), w4 =
   }
   function paint() { kpis(); table(); decisions(); newsCards(); }
   function load() {
-    Promise.all([get('ap_positions', 'select=*&order=opened_at.desc&limit=1000'), get('ap_decisions', 'select=*&order=ts.desc&limit=40'), get('ap_news', 'select=*&order=ts.desc&limit=9'), get('ap_samples', 'select=coin,price,ret_60m,change24h,ts&order=ts.desc&limit=60')]).then(function (r) {
+    Promise.all([getAll('ap_positions', 'select=*&opened_at=gte.' + RACE_START + '&order=opened_at.desc,id.desc'), get('ap_decisions', 'select=*&order=ts.desc&limit=40'), get('ap_news', 'select=*&coin=neq.CONTROL&order=ts.desc&limit=9'), get('ap_samples', 'select=coin,price,ret_60m,change24h,ts&order=ts.desc&limit=60')]).then(function (r) {
       build(r); paint();
       $('status').innerHTML = 'updated ' + bk(Date.now()).toISOString().slice(11, 19) + ' Bangkok time · refreshes every 5 min (next in <b id="next"></b>) · <span class="chip" id="refreshNow">refresh now</span> · ' + D.rows.length + ' coins tracked';
     }).catch(function (e) { $('status').innerHTML = '<span class="err">could not load: ' + esc(e.message) + '</span>'; });
