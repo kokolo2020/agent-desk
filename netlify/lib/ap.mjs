@@ -54,6 +54,12 @@ function sbHeaders(key, extra) {
   if (key.startsWith('eyJ')) h.Authorization = 'Bearer ' + key;
   return Object.assign(h, extra || {});
 }
+/* Supabase returns at most 1000 rows per request, so page through bigger result sets. */
+export async function selectAll(db, table, query) {
+  let out = [];
+  for (let off = 0; off < 20000; off += 1000) { const r = await db.select(table, query + '&limit=1000&offset=' + off); out = out.concat(r); if (r.length < 1000) break; }
+  return out;
+}
 export function sb(key) {
   return {
     async select(table, query) {
@@ -439,10 +445,10 @@ export async function tickAll(env) {
   for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2') || p.coin.endsWith(':algo3') || p.coin.endsWith(':algoq')) openAlgo[p.coin] = p;
   const openRev = {}; for (const p of openAll) if (p.coin.endsWith(':rev')) openRev[p.coin] = p;
   const openSet = new Set(open.map((p) => p.coin)), closedAlgo = {};
-  for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
-  for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo2&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
-  for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algoq&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
-  for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo3&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo2&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algoq&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo3&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   const breadth = shared0Breadth(rows), VN = ['algo', 'algo2', 'algo3', 'algoq'], TAG = [' ', ' v2 ', ' v3 ', ' q '];
   const revRes = await revTick(db, rows, openRev, ctl).catch((e) => ['rev error ' + String(e.message || e).slice(0, 60)]);
   const algoRes = await Promise.all(VN.flatMap((v, vi) => rows.map((r) => algoTick(db, r, openAlgo, closedAlgo, v, breadth, ctl).then((s) => r.coin + TAG[vi] + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60)))));
