@@ -141,8 +141,7 @@ var x4 = stats(PS().filter(function (p) { return /:rev$/.test(p.coin); })), w4 =
       $('cmp').innerHTML += '<h3 style="margin:18px 0 6px">Neutral Reversal: P&amp;L per 24h batch (Bangkok time)</h3><div class="scroll"><table><tr><th>Batch</th><th>Opened</th><th class="num">Legs</th><th class="num">Wins</th><th class="num">Net P&amp;L</th><th class="num">Fees</th></tr>' + (h || '<tr><td colspan="6" class="mut">First batch still open. It closes 24h after it opened.</td></tr>') + '</table></div>' + dt + '<p class="mut" style="margin:6px 0 0">Closed batches: ' + nclosed + ' · total ' + money(tot) + (nclosed ? ' · average per day ' + money(tot / nclosed) : '') + '</p>';
       window.__revLive = function () {
         var rows = document.querySelectorAll('tr[data-live]'); if (!rows.length) return;
-        fetch('https://www.okx.com/api/v5/market/tickers?instType=SWAP').then(function (r) { return r.json(); }).then(function (j) {
-          var px = {}; (j.data || []).forEach(function (t) { if (/-USDT-SWAP$/.test(t.instId)) px[t.instId.split('-')[0]] = +t.last; });
+        fetch('/.netlify/functions/prices').then(function (r) { return r.json(); }).catch(function () { return {}; }).then(function (px) {
           var sum = 0, ok = 0;
           Array.prototype.forEach.call(document.querySelectorAll('tr[data-live]'), function (tr) {
             var c = tr.getAttribute('data-coin'), e = +tr.getAttribute('data-e'), n = +tr.getAttribute('data-n'), d = tr.getAttribute('data-side') === 'LONG' ? 1 : -1, last = px[c] || (D.latest[c] && +D.latest[c].price);
