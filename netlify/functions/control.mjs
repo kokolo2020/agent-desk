@@ -3,7 +3,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { sb, loadControl, saveControl } from '../lib/ap.mjs';
 const json = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
-const DESKS = ['ai', 'n', 's', 'u', 'm', 'g', 'algo', 'algo2', 'algo3', 'algoq', 'rev'];
+const DESKS = ['ai', 'n', 's', 'u', 'm', 'g', 'algo', 'algo2', 'algo3', 'algoq', 'algow', 'algox', 'rev'];
 const same = (a, b) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 export default async (req) => {
   if (req.method !== 'POST') return json({ error: 'method' }, 405);

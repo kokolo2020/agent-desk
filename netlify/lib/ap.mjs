@@ -393,9 +393,11 @@ export function algoSignal(m) {
 export const bounceFade = (r) => (r.F.bounce_pct >= 1.5 && r.F.ret_5m > 0 ? { side: 'SHORT' } : { why: 'no bounce to fade' });
 export const QUIET_HOURS_UTC = [11, 12, 13, 20, 21];
 export const ALGO3 = { tp: 2, sl: 1, holdMin: 120, cooldownMin: 15, breadth: 0.9 };
+/* Wild desks: Algo entry rules, wider take-profit, same 0.6% stop. :algow = 1.2% TP / 60 min, :algox (extra wild) = 3% TP / 4 h. Forward test. */
+export const ALGOW = { tp: 1.2, sl: 0.6, holdMin: 60, cooldownMin: 10 }, ALGOX = { tp: 3, sl: 0.6, holdMin: 240, cooldownMin: 10 };
 async function algoTick(db, r, openAlgo, closedAlgo, v, breadth, ctl) {
   v = v || 'algo';
-  const P = v === 'algo3' ? ALGO3 : v === 'algo2' ? { ...ALGO, cooldownMin: 15 } : ALGO;
+  const P = v === 'algow' ? ALGOW : v === 'algox' ? ALGOX : v === 'algo3' ? ALGO3 : v === 'algo2' ? { ...ALGO, cooldownMin: 15 } : ALGO;
   const key = r.coin + ':' + v, m = r.m;
   const open = openAlgo[key];
   if (open) { const x = await manageOpen(db, open, m); return x.closed ? 'closed ' + x.pnl.toFixed(2) : 'holding'; }
@@ -442,14 +444,16 @@ export async function tickAll(env) {
   const pend = await db.select('ap_positions', 'select=*&status=eq.pending').catch(() => []);
   cnt.m += pend.length;
   const pendRes = await Promise.all(pend.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? limitTick(db, pp, r.m).then((x) => { if (x !== 'waiting') cnt.m--; return pp.coin + ' ' + x; }).catch(() => null) : null; }));
-  for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2') || p.coin.endsWith(':algo3') || p.coin.endsWith(':algoq')) openAlgo[p.coin] = p;
+  for (const p of openAll) if (p.coin.endsWith(':algo') || p.coin.endsWith(':algo2') || p.coin.endsWith(':algo3') || p.coin.endsWith(':algoq') || p.coin.endsWith(':algow') || p.coin.endsWith(':algox')) openAlgo[p.coin] = p;
   const openRev = {}; for (const p of openAll) if (p.coin.endsWith(':rev')) openRev[p.coin] = p;
   const openSet = new Set(open.map((p) => p.coin)), closedAlgo = {};
   for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo2&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algoq&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo3&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
-  const breadth = shared0Breadth(rows), VN = ['algo', 'algo2', 'algo3', 'algoq'], TAG = [' ', ' v2 ', ' v3 ', ' q '];
+  for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algow&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  for (const x of await selectAll(db, 'ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algox&order=closed_at.desc,id.desc').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
+  const breadth = shared0Breadth(rows), VN = ['algo', 'algo2', 'algo3', 'algoq', 'algow', 'algox'], TAG = [' ', ' v2 ', ' v3 ', ' q ', ' w ', ' x '];
   const revRes = await revTick(db, rows, openRev, ctl).catch((e) => ['rev error ' + String(e.message || e).slice(0, 60)]);
   const algoRes = await Promise.all(VN.flatMap((v, vi) => rows.map((r) => algoTick(db, r, openAlgo, closedAlgo, v, breadth, ctl).then((s) => r.coin + TAG[vi] + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60)))));
   const mirRes = await Promise.all(openMir.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? manageOpen(db, pp, r.m).then((x) => { if (x.closed) cnt[modeOf(pp.coin)]--; return x.closed ? pp.coin + ' closed ' + x.pnl.toFixed(2) : null; }).catch(() => null) : null; }));
