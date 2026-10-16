@@ -126,6 +126,19 @@ var x6 = stats(PS().filter(function (p) { return /:g$/.test(p.coin); })), w6 = w
 var x4 = stats(PS().filter(function (p) { return /:rev$/.test(p.coin); })), w4 = worth(function (c) { return /:rev$/.test(c); });
     rowsH += '<tr><td><b>Neutral Rev</b> <span class="mut">long 8 weakest, short 8 strongest, 24h hold, no stops</span></td><td class="num">' + x4.trades + '</td><td class="num">' + (x4.trades ? Math.round(x4.w / x4.trades * 100) + '%' : '–') + '</td><td class="num ' + cls(x4.pnl) + '">' + money(x4.pnl) + '</td><td class="num">$' + x4.fees.toFixed(2) + '</td><td class="num">' + PS().filter(function (p) { return p.status === 'open' && /:rev$/.test(p.coin); }).length + '</td><td class="num ' + cls(w4.unr) + '">' + money(w4.unr) + '</td><td class="num"><b>$' + w4.total.toFixed(2) + '</b> <span class="' + cls(w4.pct) + '">' + (w4.pct >= 0 ? '+' : '') + w4.pct.toFixed(2) + '%</span></td></tr>';
     $('cmp').innerHTML = '<div class="scroll"><table><tr><th>Desk (all use the same Claude calls)</th><th class="num">Closed</th><th class="num">Win</th><th class="num">P&amp;L</th><th class="num">Fees</th><th class="num">Open</th><th class="num">Open P&amp;L</th><th class="num">Total value (start $' + (START * D.rows.length) + ')</th></tr>' + rowsH + '</table></div>';
+
+    /* Neutral Reversal: one row per 24h batch, so daily P/L is on record */
+    (function () {
+      var rv = PS().filter(function (p) { return /:rev$/.test(p.coin); }).sort(function (a, b) { return new Date(a.opened_at) - new Date(b.opened_at); }), bs = [];
+      rv.forEach(function (p) { var t = new Date(p.opened_at).getTime(), b = bs[bs.length - 1]; if (!b || t - b.t0 > 3600000) { b = { t0: t, list: [] }; bs.push(b); } b.list.push(p); });
+      var tot = 0, nclosed = 0, h = '';
+      bs.forEach(function (b, i) {
+        var cl = b.list.filter(function (p) { return p.status === 'closed'; }), done = cl.length === b.list.length, pnl = cl.reduce(function (s, p) { return s + +p.pnl; }, 0), fe = cl.reduce(function (s, p) { return s + +p.fees; }, 0), w = cl.filter(function (p) { return +p.pnl > 0; }).length;
+        if (done) { tot += pnl; nclosed++; }
+        h += '<tr><td>Batch ' + (i + 1) + '</td><td>' + new Date(b.t0).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + '</td><td class="num">' + b.list.length + '</td><td class="num">' + (done ? w + '/' + cl.length : 'open') + '</td><td class="num ' + (done ? cls(pnl) : '') + '">' + (done ? money(pnl) : '–') + '</td><td class="num">' + (done ? '$' + fe.toFixed(2) : '–') + '</td></tr>';
+      });
+      $('cmp').innerHTML += '<h3 style="margin:18px 0 6px">Neutral Reversal: P&amp;L per 24h batch (Bangkok time)</h3><div class="scroll"><table><tr><th>Batch</th><th>Opened</th><th class="num">Legs</th><th class="num">Wins</th><th class="num">Net P&amp;L</th><th class="num">Fees</th></tr>' + (h || '<tr><td colspan="6" class="mut">First batch still open. It closes 24h after it opened.</td></tr>') + '</table></div><p class="mut" style="margin:6px 0 0">Closed batches: ' + nclosed + ' · total ' + money(tot) + (nclosed ? ' · average per day ' + money(tot / nclosed) : '') + '</p>';
+    })();
   }
   function kpis() {
     cmpTable(); var wk = worth(inAI), wz = worth(function (c) { return /:algo$/.test(c); });
