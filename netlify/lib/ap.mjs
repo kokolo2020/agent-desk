@@ -396,6 +396,8 @@ export const ALGO3 = { tp: 2, sl: 1, holdMin: 120, cooldownMin: 15, breadth: 0.9
 /* Wild desks: Algo entry rules, wider take-profit, same 0.6% stop. :algow = 1.2% TP / 60 min, :algox (extra wild) = 3% TP / 4 h. Forward test. */
 export const ALGOW = { tp: 1.2, sl: 0.6, holdMin: 60, cooldownMin: 10 }, ALGOX = { tp: 3, sl: 0.6, holdMin: 240, cooldownMin: 10 };
 /* Algo Top10 (:algot): Algo rules on the 10 coins with 5+ trades and best P/L in the first 40 h (AAVE TIA ICP ZEC ENA APT ARB OP ONDO DOT). Picked in hindsight, so this is a forward test of whether the pick holds. */
+/* 16 Oct: Koko narrowed Algo, Wild, Extra-wild and Quiet-hours to 40 coins by dropping the 10 most volatile/thin ones. Open trades on these coins are still managed to their exit. */
+export const ALGO_SKIP = ['PEPE', 'SHIB', 'BONK', 'WIF', 'FLOKI', 'TRUMP', 'SEI', 'JUP', 'PENDLE', 'GRT'];
 export const ALGOT_COINS = ['AAVE', 'TIA', 'ICP', 'ZEC', 'ENA', 'APT', 'ARB', 'OP', 'ONDO', 'DOT'];
 async function algoTick(db, r, openAlgo, closedAlgo, v, breadth, ctl) {
   v = v || 'algo';
@@ -404,6 +406,7 @@ async function algoTick(db, r, openAlgo, closedAlgo, v, breadth, ctl) {
   if (v === 'algot' && !ALGOT_COINS.includes(r.coin)) return 'not top10';
   const open = openAlgo[key];
   if (open) { const x = await manageOpen(db, open, m); return x.closed ? 'closed ' + x.pnl.toFixed(2) : 'holding'; }
+  if ((v === 'algo' || v === 'algow' || v === 'algox' || v === 'algoq') && ALGO_SKIP.includes(r.coin)) return 'excluded';
   const closed = closedAlgo[key] || [], bank = START + closed.reduce((s, x) => s + +x.pnl, 0);
   if (closed[0] && Date.now() - new Date(closed[0].closed_at).getTime() < P.cooldownMin * 60000) return 'cooldown';
   if (ctlBlocks(ctl, v, r.coin)) return 'paused';
