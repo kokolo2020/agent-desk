@@ -135,10 +135,26 @@ var x4 = stats(PS().filter(function (p) { return /:rev$/.test(p.coin); })), w4 =
       bs.forEach(function (b, i) {
         var cl = b.list.filter(function (p) { return p.status === 'closed'; }), done = cl.length === b.list.length, pnl = cl.reduce(function (s, p) { return s + +p.pnl; }, 0), fe = cl.reduce(function (s, p) { return s + +p.fees; }, 0), w = cl.filter(function (p) { return +p.pnl > 0; }).length;
         if (done) { tot += pnl; nclosed++; }
-        dt += '<details style="margin:8px 0"><summary>Batch ' + (i + 1) + ' coins (' + b.list.length + ' legs)</summary><div class="scroll"><table><tr><th>Coin</th><th>Side</th><th class="num">Entry</th><th class="num">Exit</th><th class="num">Net P&amp;L</th></tr>' + b.list.slice().sort(function (x, y) { return (x.side < y.side ? 1 : -1) || 0; }).map(function (p) { var c = p.status === 'closed'; return '<tr><td>' + p.coin.split(':')[0] + '</td><td>' + p.side + '</td><td class="num">' + p.entry_price + '</td><td class="num">' + (c ? p.exit_price : 'open') + '</td><td class="num ' + (c ? cls(+p.pnl) : '') + '">' + (c ? money(+p.pnl) : '–') + '</td></tr>'; }).join('') + '</table></div></details>';
-        h += '<tr><td>Batch ' + (i + 1) + '</td><td>' + new Date(b.t0).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + '</td><td class="num">' + b.list.length + '</td><td class="num">' + (done ? w + '/' + cl.length : 'open') + '</td><td class="num ' + (done ? cls(pnl) : '') + '">' + (done ? money(pnl) : '–') + '</td><td class="num">' + (done ? '$' + fe.toFixed(2) : '–') + '</td></tr>';
+        dt += '<details' + (done ? '' : ' open') + ' style="margin:8px 0"><summary>Batch ' + (i + 1) + ' coins (' + b.list.length + ' legs)</summary><div class="scroll"><table><tr><th>Coin</th><th>Side</th><th class="num">Entry</th><th class="num">Exit</th><th class="num">Net P&amp;L</th></tr>' + b.list.slice().sort(function (x, y) { return (x.side < y.side ? 1 : -1) || 0; }).map(function (p) { var c = p.status === 'closed'; return '<tr' + (c ? '' : ' data-live="1" data-coin="' + p.coin.split(':')[0] + '" data-side="' + p.side + '" data-e="' + p.entry_price + '" data-n="' + p.notional + '"') + '><td>' + p.coin.split(':')[0] + '</td><td>' + p.side + '</td><td class="num">' + p.entry_price + '</td><td class="num' + (c ? '' : ' lvpx') + '">' + (c ? p.exit_price : '…') + '</td><td class="num ' + (c ? cls(+p.pnl) : 'lvpl') + '">' + (c ? money(+p.pnl) : '–') + '</td></tr>'; }).join('') + '</table></div></details>';
+        h += '<tr><td>Batch ' + (i + 1) + '</td><td>' + new Date(b.t0).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + '</td><td class="num">' + b.list.length + '</td><td class="num">' + (done ? w + '/' + cl.length : 'open') + '</td><td class="num ' + (done ? cls(pnl) : '') + '">' + (done ? money(pnl) : '<b id="revLiveTot">–</b>') + '</td><td class="num">' + (done ? '$' + fe.toFixed(2) : '<span id="revLiveAt" class="mut">live</span>') + '</td></tr>';
       });
       $('cmp').innerHTML += '<h3 style="margin:18px 0 6px">Neutral Reversal: P&amp;L per 24h batch (Bangkok time)</h3><div class="scroll"><table><tr><th>Batch</th><th>Opened</th><th class="num">Legs</th><th class="num">Wins</th><th class="num">Net P&amp;L</th><th class="num">Fees</th></tr>' + (h || '<tr><td colspan="6" class="mut">First batch still open. It closes 24h after it opened.</td></tr>') + '</table></div>' + dt + '<p class="mut" style="margin:6px 0 0">Closed batches: ' + nclosed + ' · total ' + money(tot) + (nclosed ? ' · average per day ' + money(tot / nclosed) : '') + '</p>';
+      window.__revLive = function () {
+        var rows = document.querySelectorAll('tr[data-live]'); if (!rows.length) return;
+        fetch('https://www.okx.com/api/v5/market/tickers?instType=SWAP').then(function (r) { return r.json(); }).then(function (j) {
+          var px = {}; (j.data || []).forEach(function (t) { if (/-USDT-SWAP$/.test(t.instId)) px[t.instId.split('-')[0]] = +t.last; });
+          var sum = 0, ok = 0;
+          Array.prototype.forEach.call(document.querySelectorAll('tr[data-live]'), function (tr) {
+            var c = tr.getAttribute('data-coin'), e = +tr.getAttribute('data-e'), n = +tr.getAttribute('data-n'), d = tr.getAttribute('data-side') === 'LONG' ? 1 : -1, last = px[c] || (D.latest[c] && +D.latest[c].price);
+            if (!last || !e) return; var pl = n * d * (last - e) / e - 2 * n * FEEP; sum += pl; ok++;
+            tr.querySelector('.lvpx').textContent = last; var cell = tr.querySelector('.lvpl'); cell.textContent = money(pl); cell.className = 'num lvpl ' + cls(pl);
+          });
+          var tot = document.getElementById('revLiveTot'); if (tot && ok) { tot.textContent = money(sum); tot.className = cls(sum); }
+          var at = document.getElementById('revLiveAt'); if (at) at.textContent = 'live ' + new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok' }) + ' (est. after fees)';
+        }).catch(function () {});
+      };
+      if (!window.__revT) window.__revT = setInterval(function () { if (window.__revLive) window.__revLive(); }, 10000);
+      window.__revLive();
     })();
   }
   function kpis() {
