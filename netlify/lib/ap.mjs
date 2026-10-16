@@ -272,6 +272,7 @@ export async function tick(env, coin, shared) {
   const opened = [];
   if (action !== 'PASS') for (const md of MODES) {
     if (!elig[md.id].ok || conf < md.gate) continue;
+    if (ctlBlocks(shared.ctl, md.id === 'a' ? 'ai' : md.id, coin)) { opened.push(md.id + '(paused)'); continue; }
     if (md.gateShort && action === 'SHORT' && !(shared.breadth >= SHORT_GATE_BREADTH)) { opened.push(md.id + '(short blocked)'); continue; }
     const tpM = Math.max(md.minTp, tpP), dir = action === 'LONG' ? 1 : -1, bk = elig[md.id].bank, notional = bk * LEV, d = decFor(m.price) + 2;
     shared.modes[md.id].n--;
@@ -338,6 +339,31 @@ async function limitTick(db, p, m) {
   return 'waiting';
 }
 
+/* ---------- Control: settings row kept in ap_news with coin 'CONTROL' (no schema change). Edited only through netlify/functions/control.mjs after a PIN check. ---------- */
+export const CTL_DEFAULT = { paused: false, off: {}, coinsOff: {}, lossLimit: 0, fails: [], updated: null };
+export async function loadControl(db) {
+  const r = (await db.select('ap_news', 'select=id,summary&coin=eq.CONTROL&limit=1').catch(() => []))[0];
+  let body = {}; try { body = r ? JSON.parse(r.summary) : {}; } catch (e) { body = {}; }
+  return { ...CTL_DEFAULT, ...body, auto: {}, _id: r && r.id };
+}
+export async function saveControl(db, ctl) {
+  const body = { paused: !!ctl.paused, off: ctl.off || {}, coinsOff: ctl.coinsOff || {}, lossLimit: +ctl.lossLimit || 0, fails: ctl.fails || [], updated: ctl.updated || null };
+  if (ctl._id) await db.update('ap_news', 'id=eq.' + ctl._id, { summary: JSON.stringify(body) });
+  else await db.insert('ap_news', { coin: 'CONTROL', catalyst: 'control settings', sentiment: 'neutral', strength: 0, summary: JSON.stringify(body), sources: [] });
+}
+export const ctlBlocks = (ctl, desk, coin) => !!(ctl && (ctl.paused || (ctl.off && ctl.off[desk]) || (ctl.auto && ctl.auto[desk]) || (ctl.coinsOff && ctl.coinsOff[coin])));
+export async function autoPaused(db, limit) {
+  const a = {}; if (!(limit > 0)) return a;
+  const since = new Date(Date.now() - 86400000).toISOString(), sum = {};
+  for (let off = 0; off < 5000; off += 1000) {
+    const rows = await db.select('ap_positions', 'select=coin,pnl&status=eq.closed&closed_at=gte.' + since + '&order=id.asc&limit=1000&offset=' + off).catch(() => []);
+    for (const x of rows) { const k = x.coin.includes(':') ? x.coin.split(':')[1] : 'ai'; sum[k] = (sum[k] || 0) + +x.pnl; }
+    if (rows.length < 1000) break;
+  }
+  for (const k in sum) if (sum[k] <= -limit) a[k] = true;
+  return a;
+}
+
 /* ---------- Algo desk: plain rules, no AI, $250 per coin, stored as coin 'XXX:algo' ---------- */
 export const ALGO = { rmin: 0.012, dev: 0.0035, tp: 0.6, sl: 0.6, holdMin: 30, cooldownMin: 10 };
 export function algoSignal(m) {
@@ -361,7 +387,7 @@ export function algoSignal(m) {
 export const bounceFade = (r) => (r.F.bounce_pct >= 1.5 && r.F.ret_5m > 0 ? { side: 'SHORT' } : { why: 'no bounce to fade' });
 export const QUIET_HOURS_UTC = [11, 12, 13, 20, 21];
 export const ALGO3 = { tp: 2, sl: 1, holdMin: 120, cooldownMin: 15, breadth: 0.9 };
-async function algoTick(db, r, openAlgo, closedAlgo, v, breadth) {
+async function algoTick(db, r, openAlgo, closedAlgo, v, breadth, ctl) {
   v = v || 'algo';
   const P = v === 'algo3' ? ALGO3 : v === 'algo2' ? { ...ALGO, cooldownMin: 15 } : ALGO;
   const key = r.coin + ':' + v, m = r.m;
@@ -369,6 +395,7 @@ async function algoTick(db, r, openAlgo, closedAlgo, v, breadth) {
   if (open) { const x = await manageOpen(db, open, m); return x.closed ? 'closed ' + x.pnl.toFixed(2) : 'holding'; }
   const closed = closedAlgo[key] || [], bank = START + closed.reduce((s, x) => s + +x.pnl, 0);
   if (closed[0] && Date.now() - new Date(closed[0].closed_at).getTime() < P.cooldownMin * 60000) return 'cooldown';
+  if (ctlBlocks(ctl, v, r.coin)) return 'paused';
   if (bank < 20 || (r.spread_bps != null && r.spread_bps > MAX_SPREAD_BPS)) return 'skip';
   const sig = v === 'algoq' && QUIET_HOURS_UTC.includes(new Date().getUTCHours()) ? { why: 'quiet hours' } : v === 'algo3' ? (breadth >= ALGO3.breadth ? bounceFade(r) : { why: 'breadth ' + breadth.toFixed(2) + ' < gate' }) : v === 'algo2' ? bounceFade(r) : algoSignal(m);
   if (!sig.side) return sig.why;
@@ -379,14 +406,15 @@ async function algoTick(db, r, openAlgo, closedAlgo, v, breadth) {
 
 /* Neutral Reversal desk (:rev): every 24h long the 8 weakest and short the 8 strongest coins by 24h change. No stops, 24h hold. Backtest: positive in bear and bull, but only 14 days of data. Forward test. */
 export const REV = { K: 8, holdH: 24 };
-async function revTick(db, rows, openRev) {
+async function revTick(db, rows, openRev, ctl) {
   const mine = Object.values(openRev);
   const out = [];
   for (const p of mine) { const r = rows.find((x) => x.coin === p.coin.split(':')[0]); if (r) { const x = await manageOpen(db, p, r.m).catch(() => null); if (x && x.closed) out.push(p.coin + ' closed ' + x.pnl.toFixed(2)); } }
   if (mine.length) return out;
+  if (ctlBlocks(ctl, 'rev', '')) return out;
   const last = (await db.select('ap_positions', 'select=opened_at&coin=like.*:rev&order=opened_at.desc&limit=1').catch(() => []))[0];
   if (last && Date.now() - new Date(last.opened_at).getTime() < REV.holdH * 3600000) return out;
-  const rk = rows.filter((r) => r.m.change24h_pct != null && (r.spread_bps == null || r.spread_bps <= MAX_SPREAD_BPS)).sort((a, b) => a.m.change24h_pct - b.m.change24h_pct);
+  const rk = rows.filter((r) => !(ctl && ctl.coinsOff && ctl.coinsOff[r.coin]) && r.m.change24h_pct != null && (r.spread_bps == null || r.spread_bps <= MAX_SPREAD_BPS)).sort((a, b) => a.m.change24h_pct - b.m.change24h_pct);
   if (rk.length < REV.K * 2 + 4) return out;
   const legs = rk.slice(0, REV.K).map((r) => [r, 1]).concat(rk.slice(-REV.K).map((r) => [r, -1]));
   for (const [r, dir] of legs) {
@@ -401,6 +429,7 @@ const shared0Breadth = (rows) => rows.filter((r) => r.F.ret_60m < 0).length / Ma
 export async function tickAll(env) {
   if (!env.SUPABASE_SERVICE_KEY || !env.ANTHROPIC_API_KEY) return [{ skipped: 'missing keys' }];
   const { rows, db } = await scanAll(env);
+  const ctl = await loadControl(db); ctl.auto = await autoPaused(db, ctl.lossLimit);
   const openAll = await db.select('ap_positions', 'select=*&status=eq.open');
   const open = openAll.filter((p) => !p.coin.includes(':')), openAlgo = {}, openMir = openAll.filter((p) => /:[nsumg]$/.test(p.coin)), cnt = { n: 0, a: 0, s: 0, u: 0, m: 0, g: 0 };
   for (const p of openAll) { const k = modeOf(p.coin); if (k) cnt[k]++; }
@@ -415,14 +444,14 @@ export async function tickAll(env) {
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algoq&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   for (const x of await db.select('ap_positions', 'select=coin,pnl,closed_at&status=eq.closed&coin=like.*:algo3&order=closed_at.desc&limit=3000').catch(() => [])) (closedAlgo[x.coin] = closedAlgo[x.coin] || []).push(x);
   const breadth = shared0Breadth(rows), VN = ['algo', 'algo2', 'algo3', 'algoq'], TAG = [' ', ' v2 ', ' v3 ', ' q '];
-  const revRes = await revTick(db, rows, openRev).catch((e) => ['rev error ' + String(e.message || e).slice(0, 60)]);
-  const algoRes = await Promise.all(VN.flatMap((v, vi) => rows.map((r) => algoTick(db, r, openAlgo, closedAlgo, v, breadth).then((s) => r.coin + TAG[vi] + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60)))));
+  const revRes = await revTick(db, rows, openRev, ctl).catch((e) => ['rev error ' + String(e.message || e).slice(0, 60)]);
+  const algoRes = await Promise.all(VN.flatMap((v, vi) => rows.map((r) => algoTick(db, r, openAlgo, closedAlgo, v, breadth, ctl).then((s) => r.coin + TAG[vi] + s).catch((e) => r.coin + ' error ' + String(e.message || e).slice(0, 60)))));
   const mirRes = await Promise.all(openMir.map((pp) => { const r = rows.find((x) => x.coin === pp.coin.split(':')[0]); return r ? manageOpen(db, pp, r.m).then((x) => { if (x.closed) cnt[modeOf(pp.coin)]--; return x.closed ? pp.coin + ' closed ' + x.pnl.toFixed(2) : null; }).catch(() => null) : null; }));
   const rets = rows.map((r) => r.F.ret_60m).sort((x, y) => x - y), btc = rows.find((r) => r.coin === 'BTC');
   const closed = await db.select('ap_positions', 'select=side,pnl&status=eq.closed&coin=not.like.*:*&order=closed_at.desc&limit=40').catch(() => []);
   const trk = (s) => { const a = closed.filter((x) => x.side === s); return { trades: a.length, wins: a.filter((x) => +x.pnl > 0).length, pnl: +a.reduce((p, x) => p + +x.pnl, 0).toFixed(2) }; };
   const shared = {
-    breadth: rows.filter((r) => r.F.ret_60m < 0).length / Math.max(1, rows.length),
+    breadth: rows.filter((r) => r.F.ret_60m < 0).length / Math.max(1, rows.length), ctl,
     modes: Object.fromEntries(MODES.map((md) => [md.id, { n: md.cap - cnt[md.id] }])), btc60: btc ? btc.F.ret_60m : null,
     mkt: { coins_scanned: rows.length, up_60m: rows.filter((r) => r.F.ret_60m > 0).length, down_60m: rows.filter((r) => r.F.ret_60m < 0).length, median_ret_60m_pct: r4(rets[Math.floor(rets.length / 2)] || 0), btc_ret_60m_pct: btc ? r4(btc.F.ret_60m) : null, btc_change24h_pct: btc ? r4(btc.m.change24h_pct) : null },
     track: { last_40_closed: { LONG: trk('LONG'), SHORT: trk('SHORT') } }
@@ -433,7 +462,7 @@ export async function tickAll(env) {
   for (const md of MODES) shared.modes[md.id].n = md.cap - cnt[md.id];
   const todo = Array.from(openSet).concat(picks).filter((s) => COINS[s]);
   const res = await Promise.all(todo.map((coin) => tick(env, coin, shared).catch((e) => ({ coin, error: String(e.message || e).slice(0, 200) }))));
-  return [{ scanned: rows.length, picks, open: Array.from(openSet), algo: algoRes.filter((x) => /opened|closed|error/.test(x)), rev: revRes, breadth: +breadth.toFixed(2), mirrorsClosed: mirRes.filter(Boolean), limits: pendRes.filter(Boolean), openByDesk: cnt }].concat(res);
+  return [{ scanned: rows.length, picks, open: Array.from(openSet), algo: algoRes.filter((x) => /opened|closed|error/.test(x)), rev: revRes, breadth: +breadth.toFixed(2), control: { paused: ctl.paused, off: Object.keys(ctl.off).filter((k) => ctl.off[k]), auto: Object.keys(ctl.auto), coinsOff: Object.keys(ctl.coinsOff).filter((k) => ctl.coinsOff[k]) }, mirrorsClosed: mirRes.filter(Boolean), limits: pendRes.filter(Boolean), openByDesk: cnt }].concat(res);
 }
 
 /* Pick which coin the news job scans next: coins with an open trade or the biggest 24h move, oldest scan first. */
