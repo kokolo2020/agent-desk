@@ -7,4 +7,4 @@ export default async () => {
     const r = await newsJob(process.env, coin); console.log(coin, JSON.stringify(r)); return new Response(JSON.stringify(r));
   } catch (e) { console.log('news scan error', String(e.message || e)); return new Response('error', { status: 500 }); }
 };
-export const config = { schedule: '*/15 * * * *' };
+// Scheduled run disabled 18 Oct 2026 (autopilot-ai runs the news scan).
